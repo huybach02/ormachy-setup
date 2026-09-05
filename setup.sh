@@ -149,6 +149,7 @@ setup_packages() {
     # 2. Microsoft Edge (microsoft-edge-stable-bin)
     # 3. Helium Browser (helium-browser-bin)
     # 4. AppImageLauncher (appimagelauncher-beta-bin)
+    # 5. FeatherPad (featherpad)
     local pkgs_to_install=()
     
     # 1. VS Code
@@ -182,20 +183,28 @@ setup_packages() {
         log_warn "AppImageLauncher chưa được cài đặt."
         pkgs_to_install+=("appimagelauncher-beta-bin")
     fi
+
+    # 5. FeatherPad
+    if pacman -Q featherpad &>/dev/null; then
+        log_info "FeatherPad đã được cài đặt."
+    else
+        log_warn "FeatherPad chưa được cài đặt."
+        pkgs_to_install+=("featherpad")
+    fi
     
     if [ ${#pkgs_to_install[@]} -eq 0 ]; then
-        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher) đều đã có trên hệ thống!"
+        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, FeatherPad) đều đã có trên hệ thống!"
         return 0
     fi
     
     log_info "Tiến hành cài đặt các gói còn thiếu: ${pkgs_to_install[*]}..."
     
     if command -v yay &>/dev/null; then
-        yay -S --needed --noconfirm "${pkgs_to_install[@]}"
+        yay -S --needed --noconfirm --sudo pkexec "${pkgs_to_install[@]}"
     elif command -v omarchy &>/dev/null; then
         omarchy pkg aur add "${pkgs_to_install[@]}"
     else
-        log_error "Không tìm thấy yay hoặc omarchy để cài đặt gói AUR!"
+        log_error "Không tìm thấy yay hoặc omarchy để cài đặt gói!"
         return 1
     fi
     

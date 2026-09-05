@@ -52,7 +52,7 @@ omarchy-setup/
 ./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
-./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher)
+./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher, FeatherPad)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
 ./setup.sh agent_quota  # Tích hợp hiển thị quota Antigravity trên widget Agents
