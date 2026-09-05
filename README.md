@@ -12,6 +12,8 @@ omarchy-setup/
 │   │   ├── omarchy-agent-usage-update      # Wrapper cập nhật usage và trích xuất email
 │   │   ├── omarchy-sysinfo                 # Thu thập thông số CPU, RAM, Disk, GPU cho bar
 │   │   └── php-switch                      # Tiện ích chuyển đổi phiên bản PHP linh hoạt (alias: sphp)
+│   ├── blesh/
+│   │   └── init.sh        # Cấu hình autocompletion và phím Tab cho ble.sh
 │   ├── fcitx5/
 │   │   ├── config         # Phím tắt chuyển bộ gõ (Alt+Shift_L)
 │   │   └── profile        # Cấu hình bộ gõ tiếng Việt Fcitx5 Lotus
@@ -66,6 +68,7 @@ omarchy-setup/
 ./setup.sh node         # Cài đặt Node.js, trình quản lý fnm, Corepack (pnpm & yarn)
 ./setup.sh symfony      # Cài đặt Symfony CLI, kích hoạt iconv & bash completion
 ./setup.sh automount    # Cấu hình tự động mount ổ đĩa dữ liệu (/dev/sda5) khi boot
+./setup.sh autocompletion # Cài đặt và cấu hình autocompletion cho terminal (ble.sh + Tab)
 ```
 
 Lệnh `browser` ưu tiên Edge Stable, sau đó Beta và Dev nếu có. Bước này cũng tự chạy trong `packages` và `all`, cập nhật các liên kết web/HTML bằng XDG mà vẫn giữ các ứng dụng mặc định khác. Nếu chưa cài Edge, chạy `./setup.sh packages` trước. Lệnh `automount` cấu hình phân vùng `/dev/sda5` (UUID `8E3A42193A41FEA9`) vào `/run/media/$USER/8E3A42193A41FEA9` an toàn với quyền user và hỗ trợ boot không bị treo (`nofail`).
@@ -136,6 +139,16 @@ Cấu hình tự động mount phân vùng dữ liệu NTFS `/dev/sda5` (UUID `8
 ```
 * **Tự động cấp quyền thư mục**: Sử dụng cấu hình `/etc/tmpfiles.d/omarchy-media.conf` để hệ thống tự tạo `/run/media/$USER` với quyền sở hữu `0750` ngay khi boot trước khi mount unit chạy.
 * **Tối ưu hóa NTFS**: Sử dụng driver `ntfs3` của Linux kernel với các cờ `nofail`, `windows_names`, `iocharset=utf8`, `uid=1000`, `gid=1000`, giúp đọc/ghi file tiếng Việt trơn tru và không làm treo boot nếu ổ đĩa không kết nối.
+
+### 7. Tự động gợi ý lệnh & hoàn thành bằng Tab (`setup.sh autocompletion`)
+Tích hợp **ble.sh (Bash Line Editor)** mang trải nghiệm autocompletion hiện đại (tương tự Fish / Zsh Autosuggestions) trực tiếp vào Bash của Omarchy:
+```bash
+./setup.sh autocompletion
+```
+* **Chữ mờ gợi ý theo thời gian thực (Ghost text)**: Tự động hiển thị phần lệnh tiếp theo từ lịch sử câu lệnh khi bạn đang gõ.
+* **Hoàn thành lệnh bằng phím Tab**: Chỉ cần nhấn phím **Tab** (hoặc `Right Arrow`) khi chữ mờ xuất hiện để điền ngay toàn bộ câu lệnh gợi ý.
+* **Điều hướng Menu Complete**: Nếu không có gợi ý lịch sử, phím **Tab** và **Shift + Tab** sẽ mở menu lựa chọn trực quan và duyệt nhanh qua các danh sách hoàn thành.
+* **Tích hợp fzf**: Hỗ trợ tìm kiếm mờ (fuzzy search) với `Ctrl+R` (lịch sử) và `Ctrl+T` (tìm file).
 
 ## Lưu ý an toàn
 * **Xác thực 1 lần (Sudo Keep-Alive)**: Script chỉ yêu cầu nhập mật khẩu root/sudo đúng 1 lần ở đầu phiên chạy và tự động duy trì quyền hạn trong nền (tự huỷ ngay khi script kết thúc), không hỏi lại mật khẩu nhiều lần. Các tác vụ không yêu cầu quyền root (monitors, keybindings, looknfeel, sysinfo, workspaces) sẽ hoàn toàn không hỏi mật khẩu.

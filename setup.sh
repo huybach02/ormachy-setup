@@ -981,6 +981,68 @@ setup_automount() {
     fi
 }
 
+# --- Module: Terminal Autocompletion & Autosuggestions (ble.sh) ---
+setup_autocompletion() {
+    log_info "Bắt đầu cài đặt và cấu hình autocompletion cho terminal (ble.sh + Tab)..."
+
+    local blesh_dir="${HOME}/.local/share/blesh"
+    local blesh_script="${blesh_dir}/ble.sh"
+
+    # 1. Cài đặt ble.sh nếu chưa có
+    if [ -f "$blesh_script" ] || [ -f "/usr/share/blesh/ble.sh" ]; then
+        log_info "ble.sh đã được cài đặt trên hệ thống."
+    else
+        log_info "Đang tải và cài đặt ble.sh (Bash Line Editor)..."
+        local tmp_dir
+        tmp_dir="$(mktemp -d)"
+        if curl -fsSL "https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz" | tar -xJf - -C "$tmp_dir"; then
+            mkdir -p "${HOME}/.local/share"
+            bash "${tmp_dir}/ble-nightly/ble.sh" --install "${HOME}/.local/share"
+            rm -rf "$tmp_dir"
+            log_success "Đã cài đặt ble.sh vào ${blesh_dir} thành công!"
+        else
+            rm -rf "$tmp_dir"
+            log_error "Không thể tải ble.sh từ GitHub release!"
+            return 1
+        fi
+    fi
+
+    # 2. Cài đặt file cấu hình ~/.config/blesh/init.sh
+    local config_dir="${HOME}/.config/blesh"
+    local config_file="${config_dir}/init.sh"
+    local source_config="${CONFIGS_DIR}/blesh/init.sh"
+
+    mkdir -p "$config_dir"
+    if [ -f "$source_config" ]; then
+        backup_file "$config_file"
+        cp "$source_config" "$config_file"
+        log_success "Đã cài đặt cấu hình ble.sh tại ${config_file}!"
+    fi
+
+    # 3. Cấu hình ~/.bashrc để nạp ble.sh
+    local bashrc="${HOME}/.bashrc"
+    if [ -f "$bashrc" ]; then
+        # Đảm bảo nạp ble.sh --attach=none sau non-interactive guard
+        if ! grep -q 'blesh/ble.sh' "$bashrc"; then
+            log_info "Thêm ble.sh khởi tạo vào ~/.bashrc..."
+            backup_file "$bashrc"
+            sed -i '/\[\[ \$- != \*i\* \]\] && return/a \
+\
+# ble.sh (Bash Line Editor) - Khởi tạo autocompletion & autosuggestions\
+[[ $- == *i* ]] && [ -f "$HOME/.local/share/blesh/ble.sh" ] && source "$HOME/.local/share/blesh/ble.sh" --attach=none' "$bashrc"
+        fi
+
+        # Đảm bảo ble-attach ở cuối ~/.bashrc
+        if ! grep -q 'ble-attach' "$bashrc"; then
+            log_info "Thêm ble-attach vào cuối ~/.bashrc..."
+            echo -e '\n# ble.sh attach\n[[ ! ${BLE_VERSION-} ]] || ble-attach' >> "$bashrc"
+        fi
+        log_success "Đã cấu hình ~/.bashrc hỗ trợ autocompletion hoàn tất!"
+    fi
+
+    log_success "Hoàn tất thiết lập autocompletion! Mở terminal mới hoặc gõ lệnh để trải nghiệm."
+}
+
 # --- Main Dispatcher ---
 main() {
     echo -e "${COLOR_INFO}==========================================${COLOR_RESET}"
@@ -1035,6 +1097,9 @@ main() {
         automount|disks)
             setup_automount
             ;;
+        autocompletion|autocomplete|completion)
+            setup_autocompletion
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -1050,9 +1115,10 @@ main() {
             setup_nodejs
             setup_symfony
             setup_automount
+            setup_autocompletion
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony|automount]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony|automount|autocompletion]"
             exit 1
             ;;
     esac
