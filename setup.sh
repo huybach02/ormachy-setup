@@ -202,6 +202,55 @@ setup_packages() {
     log_success "Đã cài đặt xong tất cả phần mềm!"
 }
 
+# --- Module: App Window Rules & Autostart ---
+setup_apps() {
+    log_info "Bắt đầu cấu hình window rules và autostart cho các ứng dụng..."
+    
+    local hypr_dir="${HOME}/.config/hypr"
+    mkdir -p "$hypr_dir"
+    
+    # 1. Cập nhật windows.lua
+    local target_windows="${hypr_dir}/windows.lua"
+    local source_windows="${CONFIGS_DIR}/hypr/windows.lua"
+    if [ -f "$source_windows" ]; then
+        backup_file "$target_windows"
+        cp "$source_windows" "$target_windows"
+        log_success "Đã cập nhật ${target_windows}"
+    fi
+    
+    # 2. Đảm bảo hyprland.lua có require("hypr.windows")
+    local hyprland_main="${hypr_dir}/hyprland.lua"
+    if [ -f "$hyprland_main" ]; then
+        if ! grep -q 'require("hypr.windows")' "$hyprland_main"; then
+            log_info "Thêm require(\"hypr.windows\") vào hyprland.lua..."
+            backup_file "$hyprland_main"
+            sed -i '/require("hypr.autostart")/i require("hypr.windows")' "$hyprland_main"
+        fi
+    fi
+    
+    # 3. Cập nhật autostart.lua
+    local target_autostart="${hypr_dir}/autostart.lua"
+    local source_autostart="${CONFIGS_DIR}/hypr/autostart.lua"
+    if [ -f "$source_autostart" ]; then
+        backup_file "$target_autostart"
+        cp "$source_autostart" "$target_autostart"
+        log_success "Đã cập nhật ${target_autostart}"
+    fi
+    
+    # 4. Reload Hyprland nếu đang chạy
+    if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
+        log_info "Đang reload cấu hình Hyprland..."
+        hyprctl reload
+        local errors
+        errors="$(hyprctl configerrors 2>&1 || true)"
+        if [ -n "$errors" ] && [ "$errors" != "ok" ]; then
+            log_warn "Hyprland cảnh báo lỗi cấu hình:\n${errors}"
+        else
+            log_success "Hyprland đã reload thành công mà không có lỗi!"
+        fi
+    fi
+}
+
 # --- Placeholder cho các bước setup sắp tới ---
 # setup_vietnamese_input() { ... }
 # setup_looknfeel() { ... }
@@ -227,14 +276,18 @@ main() {
         packages)
             setup_packages
             ;;
+        apps)
+            setup_apps
+            ;;
         all)
             setup_monitors
             setup_workspaces
             setup_keybindings
             setup_packages
+            setup_apps
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps]"
             exit 1
             ;;
     esac

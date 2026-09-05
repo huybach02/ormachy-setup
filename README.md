@@ -27,6 +27,8 @@ omarchy-setup/
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V)
 ./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher)
+./setup.sh apps         # Cấu hình workspace gán cho app và autostart
+
 ```
 
 ## Lưu ý an toàn
