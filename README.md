@@ -27,7 +27,7 @@ omarchy-setup/
 │   │   ├── plugins/
 │   │   │   ├── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
 │   │   │   └── huybach02.tray/  # Plugin Tray tùy biến (luôn hiện đầy đủ icon, icon rõ nét)
-│   │   ├── mimeapps.list        # Mẫu ứng dụng mặc định (Edge cho web, FeatherPad cho văn bản)
+│   │   ├── mimeapps.list        # Mẫu ứng dụng mặc định (Edge cho web, Sublime Text cho văn bản)
 │   │   ├── shell.json           # Cấu hình thanh bar, layout widget và idle
 │   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
 │   └── systemd/
@@ -53,7 +53,7 @@ omarchy-setup/
 ./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
-./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, FeatherPad, GitHub CLI) & đặt Edge/FeatherPad làm mặc định
+./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, Sublime Text, GitHub CLI, LibreOffice) & đặt Edge/Sublime Text làm mặc định
 ./setup.sh browser      # Đặt Microsoft Edge đã cài làm trình duyệt mặc định (Omarchy, liên kết web, HTML)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)

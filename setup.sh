@@ -243,7 +243,7 @@ setup_packages() {
     # 2. Microsoft Edge (microsoft-edge-stable-bin)
     # 3. Helium Browser (helium-browser-bin)
     # 4. AppImageLauncher (appimagelauncher-beta-bin)
-    # 5. FeatherPad (featherpad)
+    # 5. Sublime Text (sublime-text-4)
     local pkgs_to_install=()
     
     # 1. VS Code
@@ -278,12 +278,12 @@ setup_packages() {
         pkgs_to_install+=("appimagelauncher-beta-bin")
     fi
 
-    # 5. FeatherPad
-    if pacman -Q featherpad &>/dev/null; then
-        log_info "FeatherPad đã được cài đặt."
+    # 5. Sublime Text
+    if pacman -Q sublime-text-4 &>/dev/null; then
+        log_info "Sublime Text đã được cài đặt."
     else
-        log_warn "FeatherPad chưa được cài đặt."
-        pkgs_to_install+=("featherpad")
+        log_warn "Sublime Text chưa được cài đặt."
+        pkgs_to_install+=("sublime-text-4")
     fi
 
     # 6. GitHub CLI (gh)
@@ -294,6 +294,14 @@ setup_packages() {
         pkgs_to_install+=("github-cli")
     fi
     
+    # 7. LibreOffice
+    if pacman -Q libreoffice-fresh &>/dev/null || pacman -Q libreoffice-still &>/dev/null; then
+        log_info "LibreOffice đã được cài đặt."
+    else
+        log_warn "LibreOffice chưa được cài đặt."
+        pkgs_to_install+=("libreoffice-fresh")
+    fi
+
     if [ ${#pkgs_to_install[@]} -gt 0 ]; then
         init_sudo
         log_info "Tiến hành cài đặt các gói còn thiếu: ${pkgs_to_install[*]}..."
@@ -307,17 +315,17 @@ setup_packages() {
         fi
         log_success "Đã cài đặt xong tất cả phần mềm!"
     else
-        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, FeatherPad, GitHub CLI) đều đã có trên hệ thống!"
+        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, Sublime Text, GitHub CLI, LibreOffice) đều đã có trên hệ thống!"
     fi
 
     setup_browser
 
-    # Cấu hình FeatherPad làm trình soạn thảo văn bản mặc định
-    if pacman -Q featherpad &>/dev/null; then
-        log_info "Thiết lập FeatherPad làm trình soạn thảo văn bản mặc định..."
+    # Cấu hình Sublime Text làm trình soạn thảo văn bản mặc định
+    if pacman -Q sublime-text-4 &>/dev/null; then
+        log_info "Thiết lập Sublime Text làm trình soạn thảo văn bản mặc định..."
         local defaults_dir="${HOME}/.local/state/omarchy/defaults"
         mkdir -p "$defaults_dir"
-        printf '%s\n' "featherpad" > "${defaults_dir}/editor"
+        printf '%s\n' "subl" > "${defaults_dir}/editor"
 
         local text_mimes=(
             "text/plain"
@@ -348,28 +356,16 @@ setup_packages() {
             "application/toml"
         )
         for mime in "${text_mimes[@]}"; do
-            xdg-mime default featherpad.desktop "$mime" 2>/dev/null || true
+            xdg-mime default sublime_text.desktop "$mime" 2>/dev/null || true
         done
 
-        # Cấu hình biến môi trường VISUAL / EDITOR trong ~/.bashrc (đặt trước check interactive)
-        if ! grep -q 'VISUAL="featherpad"' "${HOME}/.bashrc"; then
-            if grep -q "fnm env" "${HOME}/.bashrc"; then
-                sed -i '/fnm env/a \
-\
-# Default text editor\
-export VISUAL="featherpad"\
-export EDITOR="featherpad"' "${HOME}/.bashrc"
-            else
-                cat << 'EOF' >> "${HOME}/.bashrc"
+        # Đặt trước interactive-shell guard; thay cả cấu hình editor cũ.
+        backup_file "${HOME}/.bashrc"
+        touch "${HOME}/.bashrc"
+        sed -i -E '/^[[:space:]]*export (VISUAL|EDITOR)=/d' "${HOME}/.bashrc"
+        sed -i '1i export VISUAL="subl"\nexport EDITOR="subl -w"' "${HOME}/.bashrc"
 
-# Default text editor
-export VISUAL="featherpad"
-export EDITOR="featherpad"
-EOF
-            fi
-        fi
-
-        log_success "Đã thiết lập FeatherPad làm trình soạn thảo mặc định (Omarchy defaults, XDG MIME, VISUAL/EDITOR)!"
+        log_success "Đã thiết lập Sublime Text làm trình soạn thảo mặc định (Omarchy defaults, XDG MIME, VISUAL/EDITOR)!"
     fi
 }
 
