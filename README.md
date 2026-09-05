@@ -59,6 +59,7 @@ omarchy-setup/
 ./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
 ./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)
 ./setup.sh php          # Cài đặt môi trường PHP (8.5 & 8.3), Composer, extensions & php-switch
+./setup.sh node         # Cài đặt Node.js, trình quản lý fnm, Corepack (pnpm & yarn)
 ```
 
 ### 3. Quản lý & Chuyển đổi phiên bản PHP (`php-switch` / `sphp`)
@@ -78,6 +79,31 @@ sphp 8.5
 sphp 8.3 --fpm
 ```
 *Tất cả các extension cần thiết (mbstring, xml, curl, zip, bcmath, intl, mysql, pgsql, sqlite3, gd, soap, readline, opcache, redis, imagick) cùng Composer đã được kích hoạt đầy đủ trên cả hai phiên bản.*
+
+### 4. Quản lý & Chuyển đổi phiên bản Node.js (`fnm`)
+Hệ thống sử dụng **fnm (Fast Node Manager)** viết bằng Rust siêu nhanh, hỗ trợ tự động nhận diện version theo thư mục (`.node-version`, `.nvmrc`):
+```bash
+# Xem danh sách phiên bản Node đã cài đặt
+fnm ls
+
+# Cài đặt phiên bản Node mới (ví dụ LTS hoặc version cụ thể)
+fnm install --lts
+fnm install 22
+fnm install 24
+fnm install 26
+
+# Chuyển đổi phiên bản Node cho session hiện tại
+fnm use 22
+fnm use 24
+fnm use 26
+
+# Đặt phiên bản mặc định
+fnm default 24
+
+# Corepack đã được kích hoạt sẵn để dùng pnpm và yarn:
+pnpm -v
+yarn -v
+```
 
 ## Lưu ý an toàn
 * Script luôn tự động sao lưu (`.bak.<timestamp>`) các file cấu hình cũ trước khi ghi đè.

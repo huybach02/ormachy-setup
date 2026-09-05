@@ -615,6 +615,82 @@ setup_php() {
     log_success "Hoàn tất cài đặt môi trường PHP và php-switch!"
 }
 
+# --- Module: Node.js & Fast Node Manager (fnm) ---
+setup_nodejs() {
+    log_info "Bắt đầu cài đặt Node.js và trình quản lý phiên bản fnm (Fast Node Manager)..."
+
+    # 1. Kiểm tra và cài đặt fnm
+    if pacman -Q fnm &>/dev/null; then
+        log_info "Gói fnm đã được cài đặt."
+    else
+        log_warn "Gói fnm chưa được cài đặt, tiến hành cài đặt..."
+        if command -v yay &>/dev/null; then
+            yay -S --needed --noconfirm --sudo pkexec fnm
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --needed --noconfirm fnm
+        fi
+    fi
+
+    # 2. Cấu hình tích hợp fnm vào ~/.bashrc
+    if ! grep -q "fnm env" "${HOME}/.bashrc"; then
+        log_info "Thêm cấu hình fnm vào ~/.bashrc..."
+        backup_file "${HOME}/.bashrc"
+        if grep -q "env-bootstrap" "${HOME}/.bashrc"; then
+            sed -i '/env-bootstrap/a \
+\
+# fnm (Fast Node Manager)\
+if command -v fnm &>/dev/null; then\
+  eval "$(fnm env --use-on-cd --corepack-enabled --shell bash)"\
+fi' "${HOME}/.bashrc"
+        else
+            cat << 'EOF' >> "${HOME}/.bashrc"
+
+# fnm (Fast Node Manager)
+if command -v fnm &>/dev/null; then
+  eval "$(fnm env --use-on-cd --corepack-enabled --shell bash)"
+fi
+EOF
+        fi
+        log_success "Đã tích hợp fnm vào ~/.bashrc!"
+    else
+        log_info "fnm đã được tích hợp sẵn trong ~/.bashrc."
+    fi
+
+    # 3. Tạo shell completion cho fnm
+    local completion_dir="${HOME}/.local/share/bash-completion/completions"
+    mkdir -p "$completion_dir"
+    if command -v fnm &>/dev/null; then
+        fnm completions --shell bash > "${completion_dir}/fnm" 2>/dev/null || true
+        log_success "Đã tạo bash completion cho fnm tại ${completion_dir}/fnm"
+    fi
+
+    # 4. Kích hoạt môi trường fnm trong shell hiện tại
+    eval "$(fnm env --use-on-cd --corepack-enabled --shell bash)"
+
+    # Cài đặt Node LTS nếu chưa có
+    if ! fnm ls 2>/dev/null | grep -q "lts-latest"; then
+        log_info "Đang tải và cài đặt Node.js phiên bản LTS..."
+        fnm install --lts
+    fi
+
+    # Thiết lập default sang lts-latest
+    fnm default lts-latest 2>/dev/null || fnm default 24 2>/dev/null || true
+    fnm use default 2>/dev/null || true
+
+    # Kích hoạt Corepack cho pnpm và yarn
+    if command -v corepack &>/dev/null; then
+        log_info "Kích hoạt Corepack (pnpm & yarn)..."
+        corepack enable 2>/dev/null || true
+    fi
+
+    local current_node
+    current_node="$(node -v 2>/dev/null || echo 'none')"
+    local current_npm
+    current_npm="$(npm -v 2>/dev/null || echo 'none')"
+
+    log_success "Hoàn tất thiết lập Node.js! Node: ${current_node}, npm: ${current_npm}"
+}
+
 # --- Main Dispatcher ---
 main() {
     echo -e "${COLOR_INFO}==========================================${COLOR_RESET}"
@@ -654,6 +730,9 @@ main() {
         php)
             setup_php
             ;;
+        node|nodejs)
+            setup_nodejs
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -665,9 +744,10 @@ main() {
             setup_sysinfo
             setup_vietnamese_input
             setup_php
+            setup_nodejs
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese|php]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node]"
             exit 1
             ;;
     esac
