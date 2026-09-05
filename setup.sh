@@ -225,6 +225,14 @@ setup_packages() {
         log_warn "FeatherPad chưa được cài đặt."
         pkgs_to_install+=("featherpad")
     fi
+
+    # 6. GitHub CLI (gh)
+    if pacman -Q github-cli &>/dev/null; then
+        log_info "GitHub CLI (gh) đã được cài đặt."
+    else
+        log_warn "GitHub CLI (gh) chưa được cài đặt."
+        pkgs_to_install+=("github-cli")
+    fi
     
     if [ ${#pkgs_to_install[@]} -gt 0 ]; then
         init_sudo
@@ -239,7 +247,7 @@ setup_packages() {
         fi
         log_success "Đã cài đặt xong tất cả phần mềm!"
     else
-        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, FeatherPad) đều đã có trên hệ thống!"
+        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, FeatherPad, GitHub CLI) đều đã có trên hệ thống!"
     fi
 
     # Cấu hình FeatherPad làm trình soạn thảo văn bản mặc định
