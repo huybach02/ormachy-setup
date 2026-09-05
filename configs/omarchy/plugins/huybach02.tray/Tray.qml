@@ -789,7 +789,6 @@ BarWidget {
       anchors.fill: trayIconImage
       source: trayIconImage
       visible: trayIconRoot.symbolic
-      brightness: 1.0
       colorization: 1.0
       colorizationColor: root.foreground
     }
@@ -812,7 +811,14 @@ BarWidget {
       anchors.centerIn: parent
       width: Style.space(12)
       height: Style.space(12)
-      icon: trayItemRoot.modelData.icon
+      icon: {
+        var rawIcon = trayItemRoot.modelData.icon
+        var str = String(rawIcon || "")
+        if (trayItemRoot.modelData.id === "Fcitx" && (str === "input-keyboard-symbolic" || str.indexOf("keyboard") !== -1)) {
+          return "/usr/share/icons/hicolor/22x22/status/fcitx-lotus-off-default.png"
+        }
+        return rawIcon
+      }
     }
 
     MouseArea {
