@@ -24,12 +24,16 @@ omarchy-setup/
 │   │   ├── agents/
 │   │   │   └── antigravity.json # Cấu hình ngưỡng quota Gemini & Claude
 │   │   ├── plugins/
-│   │   │   └── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
+│   │   │   ├── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
+│   │   │   └── huybach02.tray/  # Plugin Tray tùy biến (luôn hiện đầy đủ icon, icon rõ nét)
 │   │   ├── shell.json           # Cấu hình thanh bar, layout widget và idle
 │   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
 │   └── systemd/
 │       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
-│       └── omarchy-agent-antigravity.timer   # Timer chạy mỗi 2 phút
+│       ├── omarchy-agent-antigravity.timer   # Timer chạy mỗi 2 phút
+│       └── user/
+│           └── omarchy-fcitx5.service.d/
+│               └── override.conf             # Kích hoạt StatusNotifierItem cho fcitx5
 ├── setup.sh               # Script chính để chạy cài đặt / áp dụng cấu hình
 └── README.md
 ```

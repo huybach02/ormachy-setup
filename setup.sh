@@ -456,7 +456,36 @@ setup_vietnamese_input() {
         log_success "Đã cập nhật ${target_bindings}"
     fi
 
-    # 5. Reload Hyprland
+    # 5. Cấu hình systemd override để bật icon khay hệ thống (StatusNotifierItem) cho fcitx5
+    local systemd_override_dir="${HOME}/.config/systemd/user/omarchy-fcitx5.service.d"
+    local source_override="${CONFIGS_DIR}/systemd/user/omarchy-fcitx5.service.d/override.conf"
+    local target_override="${systemd_override_dir}/override.conf"
+    if [ -f "$source_override" ]; then
+        mkdir -p "$systemd_override_dir"
+        backup_file "$target_override"
+        cp "$source_override" "$target_override"
+        systemctl --user daemon-reload
+        log_success "Đã cập nhật systemd override cho fcitx5: ${target_override}"
+    fi
+
+    # 6. Đồng bộ plugin tray tùy biến (huybach02.tray) và shell.json
+    local source_tray="${CONFIGS_DIR}/omarchy/plugins/huybach02.tray"
+    local target_tray="${HOME}/.config/omarchy/plugins/huybach02.tray"
+    if [ -d "$source_tray" ]; then
+        mkdir -p "$target_tray"
+        cp -r "$source_tray"/* "$target_tray"/
+        log_success "Đã cập nhật plugin khay hệ thống: ${target_tray}"
+    fi
+
+    local source_shell="${CONFIGS_DIR}/omarchy/shell.json"
+    local target_shell="${HOME}/.config/omarchy/shell.json"
+    if [ -f "$source_shell" ]; then
+        backup_file "$target_shell"
+        cp "$source_shell" "$target_shell"
+        log_success "Đã cập nhật cấu hình thanh bar: ${target_shell}"
+    fi
+
+    # 7. Reload Hyprland
     if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
         log_info "Đang reload cấu hình Hyprland..."
         hyprctl reload
@@ -469,11 +498,16 @@ setup_vietnamese_input() {
         fi
     fi
 
-    # 6. Khởi động lại service fcitx5
-    if systemctl --user is-active --quiet omarchy-fcitx5.service 2>/dev/null; then
-        log_info "Đang khởi động lại dịch vụ fcitx5..."
-        systemctl --user restart omarchy-fcitx5.service
-        log_success "Dịch vụ fcitx5 đã được khởi động lại thành công!"
+    # 8. Khởi động lại service fcitx5 và shell
+    log_info "Đang khởi động lại dịch vụ fcitx5..."
+    pkill -x fcitx5 2>/dev/null || true
+    systemctl --user restart omarchy-fcitx5.service 2>/dev/null || true
+    log_success "Dịch vụ fcitx5 đã được khởi động lại thành công!"
+
+    if command -v omarchy &>/dev/null; then
+        log_info "Đang làm mới omarchy shell..."
+        omarchy restart shell &>/dev/null || true
+        log_success "Omarchy shell đã được khởi động lại thành công!"
     fi
 }
 

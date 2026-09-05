@@ -75,7 +75,10 @@
       ],
       "right": [
         {
-          "id": "omarchy.tray"
+          "id": "huybach02.tray",
+          "pinned": [
+            "Fcitx"
+          ]
         },
         {
           "id": "huybach02.agents"
