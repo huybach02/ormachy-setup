@@ -99,15 +99,64 @@ if claude_file.is_file():
     except Exception:
         pass
 
+# 3. Helper to extract Antigravity email
+def get_antigravity_email():
+    candidate_dirs = [
+        Path.home() / ".gemini" / "antigravity-cli" / "log",
+        Path.home() / ".gemini" / "antigravity" / "log",
+    ]
+    log_files = []
+    for log_dir in candidate_dirs:
+        if log_dir.is_dir():
+            cli_log = log_dir.parent / "cli.log"
+            if cli_log.is_file():
+                try:
+                    resolved = cli_log.resolve()
+                    if resolved.is_file():
+                        log_files.append(resolved)
+                except Exception:
+                    pass
+            log_files.extend(log_dir.glob("cli-*.log"))
+            log_files.extend(log_dir.glob("*.log"))
+
+    seen = set()
+    unique_logs = []
+    for p in log_files:
+        try:
+            pr = p.resolve()
+            if pr not in seen and pr.is_file():
+                seen.add(pr)
+                unique_logs.append(pr)
+        except Exception:
+            continue
+
+    unique_logs.sort(key=lambda p: (p.name, os.path.getmtime(p)), reverse=True)
+
+    for log in unique_logs:
+        try:
+            with open(log, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+            for line in reversed(lines):
+                if "applyAuthResult:" in line and "email=" in line:
+                    parts = line.split("email=")
+                    if len(parts) > 1:
+                        email = parts[1].split(",")[0].strip()
+                        if email and "@" in email:
+                            return email
+        except Exception:
+            continue
+    return ""
+
 # Process antigravity.json
 ag_file = usage_dir / "antigravity.json"
 if ag_file.is_file():
     try:
         with open(ag_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if not data.get("email"):
-            data["email"] = "davidbach795@gmail.com"
-            data["authHelpText"] = "Logged in as davidbach795@gmail.com"
+        email = get_antigravity_email()
+        if email:
+            data["email"] = email
+            data["authHelpText"] = f"Logged in as {email}"
             with open(ag_file, "w", encoding="utf-8") as f:
                 json.dump(data, f)
     except Exception:

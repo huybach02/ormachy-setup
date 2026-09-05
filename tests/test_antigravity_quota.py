@@ -61,6 +61,34 @@ class QuotaTests(unittest.TestCase):
                 self.assertEqual(status, 'Quota unavailable')
                 self.assertTrue(help_text)
 
+    def test_get_user_email_returns_latest_auth_account(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir) / "log"
+            log_dir.mkdir(parents=True)
+            log_file = log_dir / "cli-20260905_120000.log"
+            log_file.write_text(
+                "2026-09-05T12:00:00Z [auth] applyAuthResult: email=old_user@gmail.com, authMethod=consumer, quotaProject=\n"
+                "2026-09-05T12:30:00Z [info] some other log message\n"
+                "2026-09-05T13:00:00Z [auth] applyAuthResult: email=new_user@gmail.com, authMethod=consumer, quotaProject=\n"
+                "2026-09-05T13:05:00Z [info] completed\n"
+            )
+            email = COLLECTOR['get_user_email'](candidate_dirs=[log_dir])
+            self.assertEqual(email, "new_user@gmail.com")
+
+    def test_get_user_email_picks_newest_log_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir) / "log"
+            log_dir.mkdir(parents=True)
+            log1 = log_dir / "cli-20260905_100000.log"
+            log1.write_text("applyAuthResult: email=user1@gmail.com, authMethod=consumer\n")
+            log2 = log_dir / "cli-20260905_110000.log"
+            log2.write_text("applyAuthResult: email=user2@gmail.com, authMethod=consumer\n")
+            email = COLLECTOR['get_user_email'](candidate_dirs=[log_dir])
+            self.assertEqual(email, "user2@gmail.com")
+
 
 if __name__ == '__main__':
     unittest.main()
+

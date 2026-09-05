@@ -27,6 +27,10 @@ GEMINI_DIR = HOME / ".gemini" / "antigravity-cli"
 HISTORY_FILE = GEMINI_DIR / "history.jsonl"
 DB_FILE = GEMINI_DIR / "conversation_summaries.db"
 LOG_DIR = GEMINI_DIR / "log"
+CANDIDATE_LOG_DIRS = [
+    GEMINI_DIR / "log",
+    HOME / ".gemini" / "antigravity" / "log",
+]
 
 CONFIG_DIR = HOME / ".config" / "omarchy" / "agents"
 CONFIG_FILE = CONFIG_DIR / "antigravity.json"
@@ -59,20 +63,65 @@ def load_config():
             pass
     return config
 
-def get_user_email():
-    if LOG_DIR.is_dir():
+def get_user_email(candidate_dirs=None):
+    if candidate_dirs is None:
+        candidate_dirs = CANDIDATE_LOG_DIRS
+
+    log_files = []
+    for log_dir in candidate_dirs:
+        if isinstance(log_dir, (str, Path)):
+            log_dir = Path(log_dir)
+            if log_dir.is_dir():
+                cli_log = log_dir.parent / "cli.log"
+                if cli_log.is_file():
+                    try:
+                        resolved = cli_log.resolve()
+                        if resolved.is_file():
+                            log_files.append(resolved)
+                    except Exception:
+                        pass
+                log_files.extend(log_dir.glob("cli-*.log"))
+                log_files.extend(log_dir.glob("*.log"))
+
+    seen = set()
+    unique_logs = []
+    for p in log_files:
         try:
-            logs = sorted(LOG_DIR.glob("*.log"), key=os.path.getmtime, reverse=True)
-            for log in logs[:3]:
-                with open(log, "r", encoding="utf-8", errors="ignore") as f:
-                    for line in f:
-                        if "applyAuthResult:" in line and "email=" in line:
-                            parts = line.split("email=")
-                            if len(parts) > 1:
-                                return parts[1].split(",")[0].strip()
+            pr = p.resolve()
+            if pr not in seen and pr.is_file():
+                seen.add(pr)
+                unique_logs.append(pr)
         except Exception:
-            pass
-    return "davidbach795@gmail.com"
+            continue
+
+    # Sort files prioritizing newest filename (cli-YYYYMMDD_HHMMSS.log ensures chronological order)
+    # and mtime as secondary sort
+    unique_logs.sort(key=lambda p: (p.name, os.path.getmtime(p)), reverse=True)
+
+    for log in unique_logs:
+        try:
+            with open(log, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+            # Read in reverse (bottom-up) to find the most recent auth event
+            for line in reversed(lines):
+                if "applyAuthResult:" in line and "email=" in line:
+                    parts = line.split("email=")
+                    if len(parts) > 1:
+                        email = parts[1].split(",")[0].strip()
+                        if email and "@" in email:
+                            return email
+        except Exception:
+            continue
+
+    # Fallback to git config user.email if available
+    try:
+        res = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True, timeout=2)
+        if res.returncode == 0 and res.stdout.strip() and "@" in res.stdout.strip():
+            return res.stdout.strip()
+    except Exception:
+        pass
+
+    return ""
 
 def unknown_limits():
     return [
