@@ -556,7 +556,7 @@ setup_php() {
     fi
 
     # Cấu hình extensions cho PHP 8.5
-    local exts=(bcmath curl gd intl mysqli pdo_mysql pdo_pgsql pdo_sqlite pgsql soap sqlite3 zip)
+    local exts=(bcmath curl gd intl mysqli pdo_mysql pdo_pgsql pdo_sqlite pgsql soap sqlite3 zip iconv)
     if [ -f "/etc/php/php.ini" ]; then
         local need_update_85=0
         for ext in "${exts[@]}"; do
@@ -691,6 +691,44 @@ EOF
     log_success "Hoàn tất thiết lập Node.js! Node: ${current_node}, npm: ${current_npm}"
 }
 
+# --- Module: Symfony CLI ---
+setup_symfony() {
+    log_info "Bắt đầu cài đặt Symfony CLI và cấu hình môi trường..."
+
+    # 1. Cài đặt symfony-cli
+    if pacman -Q symfony-cli &>/dev/null; then
+        log_info "Gói symfony-cli đã được cài đặt."
+    else
+        log_warn "Gói symfony-cli chưa được cài đặt, tiến hành cài đặt..."
+        if command -v yay &>/dev/null; then
+            yay -S --needed --noconfirm --sudo pkexec symfony-cli
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --needed --noconfirm symfony-cli
+        fi
+    fi
+
+    # 2. Đảm bảo iconv đã được kích hoạt trong php.ini (bắt buộc cho Symfony)
+    for ini in /etc/php/php.ini /etc/php-legacy/php.ini; do
+        if [ -f "$ini" ] && ! grep -q "^extension=iconv" "$ini"; then
+            log_info "Kích hoạt extension iconv trong $ini..."
+            sudo sed -i -E 's/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*iconv/extension=iconv/' "$ini" 2>/dev/null || \
+            pkexec sed -i -E 's/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*iconv/extension=iconv/' "$ini" 2>/dev/null || true
+        fi
+    done
+
+    # 3. Tạo bash completion cho Symfony CLI
+    local completion_dir="${HOME}/.local/share/bash-completion/completions"
+    mkdir -p "$completion_dir"
+    if command -v symfony &>/dev/null; then
+        symfony completion bash > "${completion_dir}/symfony" 2>/dev/null || true
+        log_success "Đã tạo bash completion cho symfony tại ${completion_dir}/symfony"
+    fi
+
+    local symfony_ver
+    symfony_ver="$(symfony version 2>/dev/null || echo 'none')"
+    log_success "Hoàn tất cài đặt Symfony CLI! Phiên bản: ${symfony_ver}"
+}
+
 # --- Main Dispatcher ---
 main() {
     echo -e "${COLOR_INFO}==========================================${COLOR_RESET}"
@@ -733,6 +771,9 @@ main() {
         node|nodejs)
             setup_nodejs
             ;;
+        symfony)
+            setup_symfony
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -745,9 +786,10 @@ main() {
             setup_vietnamese_input
             setup_php
             setup_nodejs
+            setup_symfony
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony]"
             exit 1
             ;;
     esac

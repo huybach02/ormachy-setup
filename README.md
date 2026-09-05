@@ -60,6 +60,7 @@ omarchy-setup/
 ./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)
 ./setup.sh php          # Cài đặt môi trường PHP (8.5 & 8.3), Composer, extensions & php-switch
 ./setup.sh node         # Cài đặt Node.js, trình quản lý fnm, Corepack (pnpm & yarn)
+./setup.sh symfony      # Cài đặt Symfony CLI, kích hoạt iconv & bash completion
 ```
 
 ### 3. Quản lý & Chuyển đổi phiên bản PHP (`php-switch` / `sphp`)
@@ -103,6 +104,22 @@ fnm default 24
 # Corepack đã được kích hoạt sẵn để dùng pnpm và yarn:
 pnpm -v
 yarn -v
+```
+
+### 5. Phát triển ứng dụng Symfony (`symfony-cli`)
+Symfony CLI đã được tích hợp sẵn với đầy đủ bash completion và kiểm tra tương thích:
+```bash
+# Kiểm tra sự sẵn sàng của môi trường hệ thống cho Symfony:
+symfony check:requirements
+
+# Tạo dự án Symfony mới:
+symfony new my_project_directory --version="lts"
+# hoặc tạo web app đầy đủ:
+symfony new my_project_directory --webapp
+
+# Khởi động local web server cho dự án:
+cd my_project_directory
+symfony server:start
 ```
 
 ## Lưu ý an toàn
