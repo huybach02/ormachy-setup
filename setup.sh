@@ -286,19 +286,28 @@ setup_looknfeel() {
 
 # --- Module: Agent Quota & Usage (Antigravity & Codex) ---
 setup_agent_quota() {
-    log_info "Bắt đầu cấu hình theo dõi Quota cho Antigravity Agent..."
+    log_info "Bắt đầu cấu hình theo dõi Quota & User Email cho các AI Agents (Antigravity, Codex,...)..."
     
+    local user="${USER:-$(id -un)}"
     local bin_dir="${HOME}/.local/bin"
     local systemd_dir="${HOME}/.config/systemd/user"
     mkdir -p "$bin_dir" "$systemd_dir"
     
-    # 1. Cài đặt script collector cho Antigravity
-    local target_collector="${bin_dir}/omarchy-agent-usage-antigravity"
+    # 1. Cài đặt script collector & update wrapper
     local source_collector="${CONFIGS_DIR}/bin/omarchy-agent-usage-antigravity"
+    local target_collector="${bin_dir}/omarchy-agent-usage-antigravity"
     if [ -f "$source_collector" ]; then
         cp "$source_collector" "$target_collector"
         chmod +x "$target_collector"
         log_success "Đã cập nhật ${target_collector}"
+    fi
+
+    local source_updater="${CONFIGS_DIR}/bin/omarchy-agent-usage-update"
+    local target_updater="${bin_dir}/omarchy-agent-usage-update"
+    if [ -f "$source_updater" ]; then
+        cp "$source_updater" "$target_updater"
+        chmod +x "$target_updater"
+        log_success "Đã cập nhật ${target_updater}"
     fi
     
     # 2. Cài đặt file cấu hình ngưỡng quota (nếu chưa có)
@@ -311,7 +320,22 @@ setup_agent_quota() {
         log_success "Đã tạo cấu hình quota tại ${target_conf}"
     fi
 
-    # 3. Cài đặt systemd user service và timer
+    # 3. Tùy biến plugin Agents hiển thị email tài khoản
+    local plugin_dir="${HOME}/.config/omarchy/plugins/${user}.agents"
+    local source_plugin="${CONFIGS_DIR}/omarchy/plugins/agents"
+    if [ -d "$source_plugin" ]; then
+        if [ ! -d "$plugin_dir" ]; then
+            log_info "Đang clone omarchy.agents sang ${user}.agents..."
+            omarchy plugin clone omarchy.agents &>/dev/null || true
+        fi
+        mkdir -p "$plugin_dir"
+        cp -r "${source_plugin}/"* "$plugin_dir/"
+        # Đảm bảo manifest có đúng tên user
+        sed -i "s/\"id\": \"huybach02\.agents\"/\"id\": \"${user}\.agents\"/g" "${plugin_dir}/manifest.json" 2>/dev/null || true
+        log_success "Đã đồng bộ giao diện hiển thị email cho ${user}.agents!"
+    fi
+
+    # 4. Cài đặt systemd user service và timer
     local target_service="${systemd_dir}/omarchy-agent-antigravity.service"
     local source_service="${CONFIGS_DIR}/systemd/omarchy-agent-antigravity.service"
     local target_timer="${systemd_dir}/omarchy-agent-antigravity.timer"
@@ -326,13 +350,13 @@ setup_agent_quota() {
         log_success "Đã kích hoạt systemd timer cập nhật quota tự động!"
     fi
     
-    # 4. Chạy cập nhật ngay lần đầu
-    if [ -x "$target_collector" ]; then
-        log_info "Đang thu thập dữ liệu quota Antigravity..."
-        "$target_collector"
+    # 5. Chạy cập nhật dữ liệu ngay
+    if [ -x "$target_updater" ]; then
+        log_info "Đang thu thập và cập nhật dữ liệu quota & email cho tất cả agent..."
+        "$target_updater"
     fi
     
-    # 4. Refresh Omarchy shell agents panel nếu đang chạy
+    # 6. Refresh Omarchy shell agents panel nếu đang chạy
     if command -v omarchy-shell &>/dev/null && pgrep quickshell &>/dev/null; then
         omarchy-shell omarchy.agents refresh &>/dev/null || true
         log_success "Đã refresh widget Agents trên thanh bar!"

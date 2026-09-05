@@ -8,7 +8,8 @@ Script tự động hóa cấu hình và khôi phục môi trường cá nhân t
 omarchy-setup/
 ├── configs/               # Lưu trữ các file cấu hình mẫu
 │   ├── bin/
-│   │   └── omarchy-agent-usage-antigravity # Script thu thập quota/token Antigravity
+│   │   ├── omarchy-agent-usage-antigravity # Script thu thập quota/token Antigravity
+│   │   └── omarchy-agent-usage-update      # Wrapper cập nhật usage và trích xuất email
 │   ├── hypr/
 │   │   ├── autostart.lua  # Tự động mở các ứng dụng khi đăng nhập
 │   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V)
@@ -18,6 +19,8 @@ omarchy-setup/
 │   ├── omarchy/
 │   │   ├── agents/
 │   │   │   └── antigravity.json # Cấu hình ngưỡng quota Gemini & Claude
+│   │   ├── plugins/
+│   │   │   └── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
 │   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
 │   └── systemd/
 │       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ

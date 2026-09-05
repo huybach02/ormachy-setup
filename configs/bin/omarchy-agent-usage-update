@@ -1,0 +1,117 @@
+#!/bin/bash
+# ==============================================================================
+# Enhanced omarchy-agent-usage-update wrapper
+# ==============================================================================
+# 1. Runs upstream collectors from /usr/share/omarchy/bin
+# 2. Runs Antigravity collector from ~/.local/bin
+# 3. Injects user email into all agent usage JSON records
+# ==============================================================================
+
+# Run upstream update script
+if [ -x /usr/share/omarchy/bin/omarchy-agent-usage-update ]; then
+    /usr/share/omarchy/bin/omarchy-agent-usage-update "$@"
+fi
+
+# Run Antigravity collector if installed
+if [ -x "$HOME/.local/bin/omarchy-agent-usage-antigravity" ]; then
+    "$HOME/.local/bin/omarchy-agent-usage-antigravity" &>/dev/null || true
+fi
+
+# Post-process all agent JSON files to ensure user emails are present
+python3 - << 'PYEOF'
+import json
+import base64
+import os
+from pathlib import Path
+
+usage_dir = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "omarchy" / "agents" / "usage"
+if not usage_dir.is_dir():
+    exit(0)
+
+# 1. Helper to extract Codex email
+def get_codex_email():
+    auth_file = Path.home() / ".codex" / "auth.json"
+    if auth_file.is_file():
+        try:
+            with open(auth_file, "r", encoding="utf-8") as f:
+                auth = json.load(f)
+            id_token = auth.get("tokens", {}).get("id_token", "")
+            if id_token:
+                parts = id_token.split(".")
+                if len(parts) >= 2:
+                    padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                    claims = json.loads(base64.urlsafe_b64decode(padded))
+                    if claims.get("email"):
+                        return claims["email"]
+        except Exception:
+            pass
+    return ""
+
+# 2. Helper to extract Claude email
+def get_claude_email():
+    cred_file = Path.home() / ".claude" / ".credentials.json"
+    if cred_file.is_file():
+        try:
+            with open(cred_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            oauth = data.get("claudeAiOauth", {})
+            if oauth.get("email"):
+                return oauth["email"]
+            id_token = oauth.get("idToken") or oauth.get("id_token")
+            if id_token:
+                parts = id_token.split(".")
+                if len(parts) >= 2:
+                    padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                    claims = json.loads(base64.urlsafe_b64decode(padded))
+                    if claims.get("email"):
+                        return claims["email"]
+        except Exception:
+            pass
+    return ""
+
+# Process codex.json
+codex_file = usage_dir / "codex.json"
+if codex_file.is_file():
+    try:
+        with open(codex_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        email = get_codex_email()
+        if email:
+            data["email"] = email
+            data["authHelpText"] = f"Logged in as {email}"
+            with open(codex_file, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+    except Exception:
+        pass
+
+# Process claude.json
+claude_file = usage_dir / "claude.json"
+if claude_file.is_file():
+    try:
+        with open(claude_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        email = get_claude_email()
+        if email:
+            data["email"] = email
+            data["authHelpText"] = f"Logged in as {email}"
+            with open(claude_file, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+    except Exception:
+        pass
+
+# Process antigravity.json
+ag_file = usage_dir / "antigravity.json"
+if ag_file.is_file():
+    try:
+        with open(ag_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not data.get("email"):
+            data["email"] = "davidbach795@gmail.com"
+            data["authHelpText"] = "Logged in as davidbach795@gmail.com"
+            with open(ag_file, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+    except Exception:
+        pass
+PYEOF
+
+exit 0
