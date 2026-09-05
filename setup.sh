@@ -226,23 +226,73 @@ setup_packages() {
         pkgs_to_install+=("featherpad")
     fi
     
-    if [ ${#pkgs_to_install[@]} -eq 0 ]; then
-        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, FeatherPad) đều đã có trên hệ thống!"
-        return 0
-    fi
-    
-    log_info "Tiến hành cài đặt các gói còn thiếu: ${pkgs_to_install[*]}..."
-    
-    if command -v yay &>/dev/null; then
-        yay -S --needed --noconfirm --sudoloop "${pkgs_to_install[@]}"
-    elif command -v omarchy &>/dev/null; then
-        omarchy pkg aur add "${pkgs_to_install[@]}"
+    if [ ${#pkgs_to_install[@]} -gt 0 ]; then
+        init_sudo
+        log_info "Tiến hành cài đặt các gói còn thiếu: ${pkgs_to_install[*]}..."
+        if command -v yay &>/dev/null; then
+            yay -S --needed --noconfirm --sudoloop "${pkgs_to_install[@]}"
+        elif command -v omarchy &>/dev/null; then
+            omarchy pkg aur add "${pkgs_to_install[@]}"
+        else
+            log_error "Không tìm thấy yay hoặc omarchy để cài đặt gói!"
+            return 1
+        fi
+        log_success "Đã cài đặt xong tất cả phần mềm!"
     else
-        log_error "Không tìm thấy yay hoặc omarchy để cài đặt gói!"
-        return 1
+        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, FeatherPad) đều đã có trên hệ thống!"
     fi
-    
-    log_success "Đã cài đặt xong tất cả phần mềm!"
+
+    # Cấu hình FeatherPad làm trình soạn thảo văn bản mặc định
+    if pacman -Q featherpad &>/dev/null; then
+        log_info "Thiết lập FeatherPad làm trình soạn thảo văn bản mặc định..."
+        local defaults_dir="${HOME}/.local/state/omarchy/defaults"
+        mkdir -p "$defaults_dir"
+        printf '%s\n' "featherpad" > "${defaults_dir}/editor"
+
+        local text_mimes=(
+            "text/plain"
+            "text/markdown"
+            "text/x-markdown"
+            "text/x-log"
+            "text/x-sh"
+            "text/x-shellscript"
+            "text/x-c"
+            "text/x-c++"
+            "text/x-chdr"
+            "text/x-csrc"
+            "text/x-python"
+            "text/x-yaml"
+            "application/x-yaml"
+            "text/x-php"
+            "application/x-php"
+            "text/x-lua"
+            "text/x-sql"
+            "text/css"
+            "text/csv"
+            "application/json"
+            "application/xml"
+            "text/xml"
+            "application/x-zerosize"
+            "application/x-desktop"
+            "text/x-makefile"
+            "application/toml"
+        )
+        for mime in "${text_mimes[@]}"; do
+            xdg-mime default featherpad.desktop "$mime" 2>/dev/null || true
+        done
+
+        # Cấu hình biến môi trường VISUAL / EDITOR trong ~/.bashrc
+        if ! grep -q 'VISUAL="featherpad"' "${HOME}/.bashrc"; then
+            cat << 'EOF' >> "${HOME}/.bashrc"
+
+# Default text editor
+export VISUAL="featherpad"
+export EDITOR="${EDITOR:-featherpad}"
+EOF
+        fi
+
+        log_success "Đã thiết lập FeatherPad làm trình soạn thảo mặc định (Omarchy defaults, XDG MIME, VISUAL/EDITOR)!"
+    fi
 }
 
 # --- Module: App Window Rules & Autostart ---
@@ -452,6 +502,7 @@ setup_vietnamese_input() {
 
     # 1. Cài đặt fcitx5-lotus-bin nếu chưa có
     if ! pacman -Q fcitx5-lotus &>/dev/null && ! pacman -Q fcitx5-lotus-bin &>/dev/null; then
+        init_sudo
         log_info "Đang cài đặt fcitx5-lotus-bin..."
         if command -v yay &>/dev/null; then
             yay -S --needed --noconfirm --sudoloop fcitx5-lotus-bin
@@ -464,6 +515,7 @@ setup_vietnamese_input() {
 
     # 2. Kích hoạt và chạy service fcitx5-lotus-server@<user>
     if ! systemctl is-active --quiet "fcitx5-lotus-server@${user}.service"; then
+        init_sudo
         log_info "Kích hoạt systemd service fcitx5-lotus-server@${user}..."
         sudo systemctl enable --now "fcitx5-lotus-server@${user}.service"
         log_success "Đã kích hoạt fcitx5-lotus-server@${user}.service"
@@ -586,9 +638,10 @@ setup_php() {
     done
 
     if [ ${#pkgs_to_install[@]} -gt 0 ]; then
+        init_sudo
         log_info "Tiến hành cài đặt các gói PHP còn thiếu: ${pkgs_to_install[*]}..."
         if command -v yay &>/dev/null; then
-            yay -S --needed --noconfirm "${pkgs_to_install[@]}"
+            yay -S --needed --noconfirm --sudoloop "${pkgs_to_install[@]}"
         elif command -v pacman &>/dev/null; then
             sudo pacman -S --needed --noconfirm "${pkgs_to_install[@]}"
         fi
@@ -605,6 +658,7 @@ setup_php() {
             fi
         done
         if [ "$need_update_85" -eq 1 ]; then
+            init_sudo
             log_info "Đang kích hoạt extensions cho PHP 8.5 trong /etc/php/php.ini..."
             for ext in "${exts[@]}"; do
                 sudo sed -i -E "s/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*${ext}$/extension=${ext}/g" /etc/php/php.ini
@@ -625,6 +679,7 @@ setup_php() {
             need_update_83=1
         fi
         if [ "$need_update_83" -eq 1 ]; then
+            init_sudo
             log_info "Đang kích hoạt extensions cho PHP 8.3 trong /etc/php-legacy/php.ini..."
             for ext in "${exts[@]}"; do
                 sudo sed -i -E "s/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*${ext}$/extension=${ext}/g" /etc/php-legacy/php.ini
@@ -662,6 +717,7 @@ setup_nodejs() {
     if pacman -Q fnm &>/dev/null; then
         log_info "Gói fnm đã được cài đặt."
     else
+        init_sudo
         log_warn "Gói fnm chưa được cài đặt, tiến hành cài đặt..."
         if command -v yay &>/dev/null; then
             yay -S --needed --noconfirm --sudoloop fnm
@@ -738,6 +794,7 @@ setup_symfony() {
     if pacman -Q symfony-cli &>/dev/null; then
         log_info "Gói symfony-cli đã được cài đặt."
     else
+        init_sudo
         log_warn "Gói symfony-cli chưa được cài đặt, tiến hành cài đặt..."
         if command -v yay &>/dev/null; then
             yay -S --needed --noconfirm --sudoloop symfony-cli
@@ -749,6 +806,7 @@ setup_symfony() {
     # 2. Đảm bảo iconv đã được kích hoạt trong php.ini (bắt buộc cho Symfony)
     for ini in /etc/php/php.ini /etc/php-legacy/php.ini; do
         if [ -f "$ini" ] && ! grep -q "^extension=iconv" "$ini"; then
+            init_sudo
             log_info "Kích hoạt extension iconv trong $ini..."
             sudo sed -i -E 's/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*iconv/extension=iconv/' "$ini"
         fi
@@ -786,7 +844,6 @@ main() {
             setup_keybindings
             ;;
         packages)
-            init_sudo
             setup_packages
             ;;
         apps)
@@ -802,23 +859,18 @@ main() {
             setup_sysinfo
             ;;
         vietnamese|input)
-            init_sudo
             setup_vietnamese_input
             ;;
         php)
-            init_sudo
             setup_php
             ;;
         node|nodejs)
-            init_sudo
             setup_nodejs
             ;;
         symfony)
-            init_sudo
             setup_symfony
             ;;
         all)
-            init_sudo
             setup_monitors
             setup_workspaces
             setup_keybindings

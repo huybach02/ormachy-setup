@@ -27,6 +27,7 @@ omarchy-setup/
 │   │   ├── plugins/
 │   │   │   ├── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
 │   │   │   └── huybach02.tray/  # Plugin Tray tùy biến (luôn hiện đầy đủ icon, icon rõ nét)
+│   │   ├── mimeapps.list        # Thiết lập ứng dụng mặc định (FeatherPad làm editor mặc định)
 │   │   ├── shell.json           # Cấu hình thanh bar, layout widget và idle
 │   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
 │   └── systemd/
@@ -52,7 +53,7 @@ omarchy-setup/
 ./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
-./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher, FeatherPad)
+./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, FeatherPad) & đặt FeatherPad làm editor mặc định
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
 ./setup.sh agent_quota  # Tích hợp hiển thị quota Antigravity trên widget Agents
