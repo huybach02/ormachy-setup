@@ -174,6 +174,66 @@ setup_keybindings() {
     fi
 }
 
+# --- Module: Nautilus Terminal Context Menu ---
+setup_file_manager() {
+    local missing=() pkg
+    for pkg in nautilus-python xdg-terminal-exec; do
+        if ! pacman -Q "$pkg" &>/dev/null; then
+            missing+=("$pkg")
+        fi
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        init_sudo
+        sudo pacman -S --needed --noconfirm "${missing[@]}"
+    fi
+    local target_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/nautilus-python/extensions"
+    local target="${target_dir}/open-terminal-here.py"
+    mkdir -p "$target_dir"
+    backup_file "$target"
+    cp "${CONFIGS_DIR}/nautilus/extensions/open-terminal-here.py" "$target"
+    log_success "Đã thêm Open Terminal Here cho thư mục trong Files."
+    log_info "Đóng Files rồi chạy nautilus -q và mở lại để nạp menu mới."
+}
+
+# --- Module: Default Browser ---
+setup_browser() {
+    log_info "Thiết lập Microsoft Edge làm trình duyệt mặc định..."
+
+    local desktop_id="" candidate data_dir
+    local data_dirs=()
+    IFS=: read -r -a data_dirs <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    data_dirs=("${XDG_DATA_HOME:-${HOME}/.local/share}" "${data_dirs[@]}")
+    for candidate in microsoft-edge.desktop microsoft-edge-beta.desktop microsoft-edge-dev.desktop; do
+        for data_dir in "${data_dirs[@]}"; do
+            if [ -f "${data_dir}/applications/${candidate}" ]; then
+                desktop_id="$candidate"
+                break 2
+            fi
+        done
+    done
+
+    if [ -z "$desktop_id" ]; then
+        log_error "Chưa tìm thấy Microsoft Edge. Hãy chạy ./setup.sh packages để cài đặt trước."
+        return 1
+    fi
+    if ! command -v xdg-settings &>/dev/null || ! command -v xdg-mime &>/dev/null; then
+        log_error "Cần cài đặt xdg-utils để thiết lập trình duyệt mặc định."
+        return 1
+    fi
+
+    local config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}"
+    mkdir -p "$config_dir"
+    backup_file "${config_dir}/mimeapps.list"
+    # Omarchy cũng đọc default-web-browser qua xdg-settings khi mở trình duyệt.
+    env -u BROWSER xdg-settings set default-web-browser "$desktop_id"
+    local mime
+    for mime in text/html application/xhtml+xml x-scheme-handler/http x-scheme-handler/https x-scheme-handler/about x-scheme-handler/unknown; do
+        xdg-mime default "$desktop_id" "$mime"
+    done
+
+    log_success "Đã đặt Microsoft Edge (${desktop_id}) làm trình duyệt mặc định cho Omarchy, liên kết web và HTML!"
+}
+
 # --- Module: Packages & Applications ---
 setup_packages() {
     log_info "Bắt đầu kiểm tra và cài đặt các ứng dụng cần thiết..."
@@ -249,6 +309,8 @@ setup_packages() {
     else
         log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher, FeatherPad, GitHub CLI) đều đã có trên hệ thống!"
     fi
+
+    setup_browser
 
     # Cấu hình FeatherPad làm trình soạn thảo văn bản mặc định
     if pacman -Q featherpad &>/dev/null; then
@@ -406,6 +468,7 @@ setup_agent_quota() {
     local source_collector="${CONFIGS_DIR}/bin/omarchy-agent-usage-antigravity"
     local target_collector="${bin_dir}/omarchy-agent-usage-antigravity"
     if [ -f "$source_collector" ]; then
+        backup_file "$target_collector"
         cp "$source_collector" "$target_collector"
         chmod +x "$target_collector"
         log_success "Đã cập nhật ${target_collector}"
@@ -414,12 +477,13 @@ setup_agent_quota() {
     local source_updater="${CONFIGS_DIR}/bin/omarchy-agent-usage-update"
     local target_updater="${bin_dir}/omarchy-agent-usage-update"
     if [ -f "$source_updater" ]; then
+        backup_file "$target_updater"
         cp "$source_updater" "$target_updater"
         chmod +x "$target_updater"
         log_success "Đã cập nhật ${target_updater}"
     fi
     
-    # 2. Cài đặt file cấu hình ngưỡng quota (nếu chưa có)
+    # 2. Cài đặt nhãn gói (quota thật được đọc qua agy /usage)
     local config_dir="${HOME}/.config/omarchy/agents"
     local target_conf="${config_dir}/antigravity.json"
     local source_conf="${CONFIGS_DIR}/omarchy/agents/antigravity.json"
@@ -438,6 +502,10 @@ setup_agent_quota() {
             omarchy plugin clone omarchy.agents &>/dev/null || true
         fi
         mkdir -p "$plugin_dir"
+        local plugin_file
+        for plugin_file in Main.qml Panel.qml Agent.qml manifest.json; do
+            backup_file "${plugin_dir}/${plugin_file}"
+        done
         cp -r "${source_plugin}/"* "$plugin_dir/"
         # Đảm bảo manifest có đúng tên user
         sed -i "s/\"id\": \"huybach02\.agents\"/\"id\": \"${user}\.agents\"/g" "${plugin_dir}/manifest.json" 2>/dev/null || true
@@ -451,12 +519,15 @@ setup_agent_quota() {
     local source_timer="${CONFIGS_DIR}/systemd/omarchy-agent-antigravity.timer"
     
     if [ -f "$source_service" ] && [ -f "$source_timer" ]; then
+        backup_file "$target_service"
+        backup_file "$target_timer"
         cp "$source_service" "$target_service"
         cp "$source_timer" "$target_timer"
         
         systemctl --user daemon-reload
-        systemctl --user enable --now omarchy-agent-antigravity.timer
-        log_success "Đã kích hoạt systemd timer cập nhật quota tự động!"
+        systemctl --user enable omarchy-agent-antigravity.timer
+        systemctl --user restart omarchy-agent-antigravity.timer
+        log_success "Đã kích hoạt timer cập nhật quota và token Antigravity mỗi 30 giây!"
     fi
     
     # 5. Chạy cập nhật dữ liệu ngay
@@ -465,10 +536,10 @@ setup_agent_quota() {
         "$target_updater"
     fi
     
-    # 6. Refresh Omarchy shell agents panel nếu đang chạy
+    # 6. Nạp lại QML để nút Refresh và popup không cuộn được áp dụng ngay
     if command -v omarchy-shell &>/dev/null && pgrep quickshell &>/dev/null; then
-        omarchy-shell omarchy.agents refresh &>/dev/null || true
-        log_success "Đã refresh widget Agents trên thanh bar!"
+        omarchy restart shell
+        log_success "Đã nạp lại widget Agents: Refresh, quota thật và popup không cuộn!"
     fi
 }
 
@@ -862,6 +933,12 @@ main() {
         packages)
             setup_packages
             ;;
+        file_manager)
+            setup_file_manager
+            ;;
+        browser)
+            setup_browser
+            ;;
         apps)
             setup_apps
             ;;
@@ -891,6 +968,7 @@ main() {
             setup_workspaces
             setup_keybindings
             setup_packages
+            setup_file_manager
             setup_apps
             setup_looknfeel
             setup_agent_quota
@@ -901,7 +979,7 @@ main() {
             setup_symfony
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony]"
             exit 1
             ;;
     esac

@@ -23,16 +23,16 @@ omarchy-setup/
 │   │   └── windows.lua    # Window rules gán cửa sổ ứng dụng vào workspace
 │   ├── omarchy/
 │   │   ├── agents/
-│   │   │   └── antigravity.json # Cấu hình ngưỡng quota Gemini & Claude
+│   │   │   └── antigravity.json # Nhãn gói Antigravity
 │   │   ├── plugins/
 │   │   │   ├── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
 │   │   │   └── huybach02.tray/  # Plugin Tray tùy biến (luôn hiện đầy đủ icon, icon rõ nét)
-│   │   ├── mimeapps.list        # Thiết lập ứng dụng mặc định (FeatherPad làm editor mặc định)
+│   │   ├── mimeapps.list        # Mẫu ứng dụng mặc định (Edge cho web, FeatherPad cho văn bản)
 │   │   ├── shell.json           # Cấu hình thanh bar, layout widget và idle
 │   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
 │   └── systemd/
 │       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
-│       ├── omarchy-agent-antigravity.timer   # Timer chạy mỗi 2 phút
+│       ├── omarchy-agent-antigravity.timer   # Timer chạy mỗi 30 giây
 │       └── user/
 │           └── omarchy-fcitx5.service.d/
 │               └── override.conf             # Kích hoạt StatusNotifierItem cho fcitx5
@@ -53,16 +53,19 @@ omarchy-setup/
 ./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
-./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, FeatherPad, GitHub CLI) & đặt FeatherPad làm editor mặc định
+./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, FeatherPad, GitHub CLI) & đặt Edge/FeatherPad làm mặc định
+./setup.sh browser      # Đặt Microsoft Edge đã cài làm trình duyệt mặc định (Omarchy, liên kết web, HTML)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
-./setup.sh agent_quota  # Tích hợp hiển thị quota Antigravity trên widget Agents
+./setup.sh agent_quota  # Hiển thị quota thật Gemini và Claude/GPT trên widget Agents
 ./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
 ./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)
 ./setup.sh php          # Cài đặt môi trường PHP (8.5 & 8.3), Composer, extensions & php-switch
 ./setup.sh node         # Cài đặt Node.js, trình quản lý fnm, Corepack (pnpm & yarn)
 ./setup.sh symfony      # Cài đặt Symfony CLI, kích hoạt iconv & bash completion
 ```
+
+Lệnh `browser` ưu tiên Edge Stable, sau đó Beta và Dev nếu có. Bước này cũng tự chạy trong `packages` và `all`, cập nhật các liên kết web/HTML bằng XDG mà vẫn giữ các ứng dụng mặc định khác. Nếu chưa cài Edge, chạy `./setup.sh packages` trước.
 
 ### 3. Quản lý & Chuyển đổi phiên bản PHP (`php-switch` / `sphp`)
 Môi trường PHP hỗ trợ chuyển đổi nhanh giữa các phiên bản (mặc định là PHP 8.5, kèm sẵn PHP 8.3):
@@ -133,3 +136,28 @@ symfony server:start
   cd ~/omarchy-setup
   ./setup.sh
   ```
+
+### Quota Antigravity
+Collector gọi `agy --print /usage --output-format json` để đọc quota thật của tài khoản đã đăng nhập, không chạy lượt chat. Popup hiển thị hai nhóm **Gemini** và **Claude / GPT**, mỗi nhóm có hạn mức **5 giờ** và **tuần**, kèm thời điểm reset từ Antigravity. Phần trăm trên thanh là **đã dùng** (`1 - remaining_fraction`), không phải phần trăm còn lại.
+
+Timer cập nhật mỗi 30 giây. Cần cài CLI `agy` và đăng nhập trước. Nếu không lấy được dữ liệu (mất mạng, hết phiên đăng nhập hoặc CLI thay đổi định dạng), collector hiển thị `—` cùng thông báo; không thay bằng số prompt hoặc quota cũ. Các ngưỡng `gemini_limit` / `claude_limit` trước đây không còn được sử dụng. Thống kê token lấy từ `gen_metadata` trong database hội thoại Antigravity: tổng input, output, cache read và cache write; output đã gồm thinking nên không cộng thinking lần nữa. Thống kê ngày dùng múi giờ máy, thống kê model dùng tên model trong bản ghi. Chỉ bao gồm dữ liệu còn lưu trên máy; bản ghi không đọc được được đếm trong `tokenStatsSkipped`. Popup tự tăng chiều cao theo nội dung, không cuộn dọc; nội dung vượt màn hình sẽ được thu nhỏ để vừa.
+
+Nút **Refresh** trong popup cập nhật ngay dữ liệu các agent; nút hiện **Refreshing…** trong khi đang chạy. Phím **R** vẫn dùng được.
+
+### Áp dụng các cập nhật trình duyệt và widget Agents
+```bash
+./setup.sh browser      # Microsoft Edge mặc định
+./setup.sh agent_quota  # Quota thật, token từ database, timer 30s, nút Refresh, popup không cuộn
+```
+`agent_quota` sao lưu các file sẽ cập nhật, khởi động lại timer để áp dụng chu kỳ mới và khởi động lại Omarchy shell để nạp giao diện mới. `./setup.sh all` cũng bao gồm hai phần này. Không cần chép cấu hình thủ công.
+
+Kiểm tra collector:
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+### Open Terminal Here trong Files
+```bash
+./setup.sh file_manager
+```
+Thêm menu **Open Terminal Here** khi bấm chuột phải nền thư mục hoặc một thư mục được chọn. Terminal mặc định mở đúng thư mục đó; hỗ trợ đường dẫn có dấu và khoảng trắng. Sau cài đặt, đóng Files, chạy `nautilus -q` rồi mở lại. Module này cũng được chạy trong `all`.

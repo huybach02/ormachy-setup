@@ -115,6 +115,7 @@ Item {
   // -------------------------------------------------------------- refresh
 
   property int refreshIntervalSec: Math.max(30, Number(setting("refreshIntervalSec", 900)))
+  readonly property bool refreshing: updateProcess.running
   property string pendingUpdateKind: ""
 
   Timer {

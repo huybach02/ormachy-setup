@@ -2,9 +2,8 @@
 """
 Collect Antigravity usage and quota into one display-ready JSON record for Omarchy.
 
-Supports dual model quotas for Antigravity:
-  1. Gemini (Flash / Pro)
-  2. Claude (Sonnet / Opus)
+Reads real per-group quota via agy --print /usage --output-format json.
+History counts are local activity, not a measurement of server quota.
 
 Watches ~/.gemini/antigravity-cli history, conversations, and quota status.
 Configurable via ~/.config/omarchy/agents/antigravity.json.
@@ -15,6 +14,11 @@ import os
 import sys
 import json
 import sqlite3
+import shutil
+import subprocess
+import math
+import fcntl
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -32,9 +36,6 @@ USAGE_FILE = USAGE_DIR / "antigravity.json"
 
 # Default quota configuration for Antigravity
 DEFAULT_CONFIG = {
-    "gemini_limit": 100,      # Max prompts per 5h window
-    "claude_limit": 50,       # Max prompts per 5h window
-    "window_hours": 5,        # Rolling window in hours
     "tier_label": "DeepMind"
 }
 
@@ -73,14 +74,189 @@ def get_user_email():
             pass
     return "davidbach795@gmail.com"
 
+def unknown_limits():
+    return [
+        {"label": f"{group} · {window}", "title": f"{group} · {window}",
+         "percent": -1, "resetsAt": "", "unknown": True}
+        for group in ("Gemini", "Claude / GPT") for window in ("5h", "Weekly")
+    ]
+
+
+def parse_quota(payload):
+    """CLI reports remaining fractions; Omarchy meters report fractions used."""
+    command = payload.get("command", {})
+    if payload.get("status") != "SUCCESS" or command.get("name") != "usage":
+        raise ValueError("Not a successful usage response")
+    groups = command.get("data", {}).get("groups", [])
+    expected = {
+        "gemini-5h": ("Gemini", "5h"),
+        "gemini-weekly": ("Gemini", "Weekly"),
+        "3p-5h": ("Claude / GPT", "5h"),
+        "3p-weekly": ("Claude / GPT", "Weekly"),
+    }
+    buckets = {}
+    for group in groups:
+        for bucket in group.get("buckets", []):
+            bucket_id = bucket.get("id")
+            if bucket_id in expected:
+                if bucket_id in buckets:
+                    raise ValueError("Duplicate quota bucket")
+                buckets[bucket_id] = bucket
+    limits = []
+    for bucket_id, (group, window) in expected.items():
+        title = f"{group} · {window}"
+        entry = {"label": title, "title": title, "percent": -1,
+                 "resetsAt": "", "unknown": True}
+        bucket = buckets.get(bucket_id, {})
+        remaining = bucket.get("remaining_fraction")
+        reset = bucket.get("reset_time")
+        if (isinstance(remaining, (int, float)) and not isinstance(remaining, bool)
+                and math.isfinite(remaining) and 0 <= remaining <= 1
+                and isinstance(reset, str)):
+            try:
+                reset_dt = datetime.fromisoformat(reset.replace("Z", "+00:00"))
+                if reset_dt.tzinfo is not None:
+                    entry.update(percent=1.0 - remaining, resetsAt=reset, unknown=False)
+            except ValueError:
+                pass
+        limits.append(entry)
+    if all(entry["unknown"] for entry in limits):
+        raise ValueError("No valid quota buckets")
+    return limits
+
+
+def fetch_quota():
+    executable = shutil.which("agy")
+    if not executable:
+        candidate = HOME / ".local/bin/agy"
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            executable = str(candidate)
+    if not executable:
+        return unknown_limits(), "Quota unavailable", "Antigravity CLI (agy) not found."
+    try:
+        result = subprocess.run(
+            [executable, "--print", "/usage", "--output-format", "json"],
+            capture_output=True, text=True, timeout=45, check=True,
+            cwd=HOME,
+        )
+        limits = parse_quota(json.loads(result.stdout))
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError):
+        return unknown_limits(), "Quota unavailable", "Could not refresh quota. Check agy /usage and sign-in."
+    if any(entry["unknown"] for entry in limits):
+        return limits, "Some quotas unavailable", "Some quota buckets were missing or invalid."
+    return limits, "", ""
+
+
+def proto_varint(blob, offset):
+    value = 0
+    for shift in range(0, 70, 7):
+        if offset >= len(blob):
+            raise ValueError("Truncated protobuf")
+        byte = blob[offset]
+        offset += 1
+        value |= (byte & 127) << shift
+        if byte < 128:
+            return value, offset
+    raise ValueError("Invalid varint")
+
+
+def proto_fields(blob):
+    offset = 0
+    while offset < len(blob):
+        tag, offset = proto_varint(blob, offset)
+        wire = tag & 7
+        if tag >> 3 == 0:
+            raise ValueError("Invalid protobuf field")
+        if wire == 0:
+            value, offset = proto_varint(blob, offset)
+        else:
+            if wire == 2:
+                size, offset = proto_varint(blob, offset)
+            elif wire in (1, 5):
+                size = 8 if wire == 1 else 4
+            else:
+                raise ValueError("Unsupported protobuf wire type")
+            if offset + size > len(blob):
+                raise ValueError("Truncated protobuf field")
+            value = blob[offset:offset + size]
+            offset += size
+        yield tag >> 3, value
+
+
+def token_stats(conversation_dir, dates, today):
+    # Field numbers verified against the descriptors embedded in agy:
+    # CortexStepGeneratorMetadata -> ChatModelMetadata -> ModelUsageStats.
+    # Read generation usage once; the same usage is also copied into steps.
+    days = {day: 0 for day in dates}
+    models, today_models, seen = {}, {}, set()
+    skipped = 0
+    for path in sorted(conversation_dir.glob("*.db")):
+        try:
+            with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
+                timestamps = {}
+                for idx, blob in conn.execute("SELECT idx, metadata FROM steps"):
+                    try:
+                        meta = dict(proto_fields(blob or b""))
+                        stamp = dict(proto_fields(meta.get(1, b""))).get(1)
+                        if stamp:
+                            timestamps[idx] = datetime.fromtimestamp(stamp, timezone.utc).astimezone().strftime("%Y-%m-%d")
+                    except (ValueError, TypeError, OverflowError, OSError):
+                        continue
+                for idx, blob in conn.execute("SELECT idx, data FROM gen_metadata"):
+                    try:
+                        entries = list(proto_fields(blob or b""))
+                        meta = dict(entries)
+                        chat = dict(proto_fields(meta.get(1, b"")))
+                        if 4 not in chat:
+                            continue
+                        usage = dict(proto_fields(chat[4]))
+                        identity = usage.get(7) or usage.get(11) or (path.name, idx)
+                        if identity in seen:
+                            continue
+                        indices = []
+                        for field, value in entries:
+                            if field == 2:
+                                if isinstance(value, int):
+                                    indices.append(value)
+                                else:
+                                    pos = 0
+                                    while pos < len(value):
+                                        step, pos = proto_varint(value, pos)
+                                        indices.append(step)
+                        day = next((timestamps[i] for i in indices if i in timestamps), None)
+                        if day is None:
+                            skipped += 1
+                            continue
+                        model = (chat.get(21) or chat.get(19) or chat.get(22) or b"").decode("utf-8")
+                        if not model:
+                            model = f"Unknown model ({usage.get(1, 'unknown')})"
+                        counts = {name: usage.get(field, 0) for name, field in
+                                  (("inputTokens", 2), ("outputTokens", 3), ("cacheWriteTokens", 4), ("cacheReadTokens", 5))}
+                        if any(not isinstance(v, int) or v < 0 for v in counts.values()):
+                            raise ValueError("Invalid token count")
+                        # Output already includes thinking + response tokens.
+                        counts["totalTokens"] = sum(counts.values())
+                        if counts["totalTokens"] == 0:
+                            continue
+                        seen.add(identity)
+                        bucket = models.setdefault(model, {key: 0 for key in counts})
+                        for key, value in counts.items():
+                            bucket[key] += value
+                        if day in days:
+                            days[day] += counts["totalTokens"]
+                        if day == today:
+                            today_models[model] = today_models.get(model, 0) + counts["totalTokens"]
+                    except (ValueError, TypeError, AttributeError, UnicodeError):
+                        skipped += 1
+        except sqlite3.Error:
+            skipped += 1
+    return days, models, today_models, skipped
+
+
 def main():
     config = load_config()
-    gemini_limit = max(1, int(config.get("gemini_limit", 100)))
-    claude_limit = max(1, int(config.get("claude_limit", 50)))
-    window_hours = max(1, int(config.get("window_hours", 5)))
     tier_label = str(config.get("tier_label", "DeepMind"))
 
-    now_utc = datetime.now(timezone.utc)
     now_local = datetime.now()
     today_str = now_local.strftime("%Y-%m-%d")
     recent_dates = [(now_local - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
@@ -95,10 +271,6 @@ def main():
     gemini_prompts_today = 0
     claude_prompts_today = 0
 
-    gemini_window_timestamps = []
-    claude_window_timestamps = []
-
-    window_cutoff_utc = now_utc - timedelta(hours=window_hours)
 
     # Track current active model per conversation (default to gemini)
     conv_model = {}
@@ -147,107 +319,45 @@ def main():
                             else:
                                 gemini_prompts_today += 1
 
-                        # Track rolling window
-                        if dt_utc >= window_cutoff_utc:
-                            if model_type == "claude":
-                                claude_window_timestamps.append(dt_utc)
-                            else:
-                                gemini_window_timestamps.append(dt_utc)
-
                     if conv_id:
                         unique_sessions.add(conv_id)
                     total_prompts += 1
                 except Exception:
                     continue
 
-    # Query step count for token estimation
-    total_steps = 0
-    if DB_FILE.is_file():
-        try:
-            conn = sqlite3.connect(DB_FILE)
-            cur = conn.cursor()
-            cur.execute("SELECT sum(step_count) FROM conversation_summaries;")
-            row = cur.fetchone()
-            if row and row[0]:
-                total_steps = row[0]
-            conn.close()
-        except Exception:
-            pass
-
-    gemini_today_tokens = gemini_prompts_today * 3500
-    claude_today_tokens = claude_prompts_today * 3500
-    today_total_tokens = gemini_today_tokens + claude_today_tokens
-
-    gemini_total_tokens = max(gemini_prompts_today * 3500, total_steps * 2000)
-    claude_total_tokens = claude_prompts_today * 3500
+    token_days, model_usage, today_by_model, skipped = token_stats(
+        GEMINI_DIR / "conversations", recent_dates, today_str
+    )
 
     user_email = get_user_email()
 
-    # Calculate utilization % and reset timers
-    gemini_window_count = len(gemini_window_timestamps)
-    gemini_percent = min(1.0, round(gemini_window_count / gemini_limit, 2))
-    if gemini_window_timestamps:
-        gemini_resets_at = (min(gemini_window_timestamps) + timedelta(hours=window_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    else:
-        gemini_resets_at = ""
-
-    claude_window_count = len(claude_window_timestamps)
-    claude_percent = min(1.0, round(claude_window_count / claude_limit, 2))
-    if claude_window_timestamps:
-        claude_resets_at = (min(claude_window_timestamps) + timedelta(hours=window_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    else:
-        claude_resets_at = ""
-
-    limits = [
-        {
-            "label": "Gemini (Flash / Pro)",
-            "title": "Gemini (Flash / Pro)",
-            "percent": gemini_percent,
-            "resetsAt": gemini_resets_at
-        },
-        {
-            "label": "Claude (Sonnet / Opus)",
-            "title": "Claude (Sonnet / Opus)",
-            "percent": claude_percent,
-            "resetsAt": claude_resets_at
-        }
-    ]
+    limits, quota_status, quota_help = fetch_quota()
 
     record = {
         "schemaVersion": 1,
         "id": "antigravity",
         "name": "Antigravity",
-        "updatedAt": now_utc.isoformat(),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
         "ready": True,
         "hasLocalStats": True,
         "todayPrompts": today_prompts,
         "todaySessions": max(1, len(today_sessions)),
-        "todayTotalTokens": today_total_tokens,
-        "todayTokensByModel": {
-            "Gemini 3.8 Flash (High)": gemini_today_tokens,
-            "Claude Sonnet 4.6 (Thinking)": claude_today_tokens
-        },
-        "recentDays": [{"date": d, "messageCount": recent_days[d]} for d in recent_dates],
+        "todayTotalTokens": sum(today_by_model.values()),
+        "todayTokensByModel": today_by_model,
+        "recentDays": [{"date": d, "messageCount": token_days[d]} for d in recent_dates],
         "totalPrompts": total_prompts,
         "totalSessions": max(1, len(unique_sessions)),
         "activeDays": len(active_dates),
         "activeDates": sorted(list(active_dates)),
-        "modelUsage": {
-            "Gemini 3.8 Flash (High)": {
-                "inputTokens": int(gemini_total_tokens * 0.8),
-                "outputTokens": int(gemini_total_tokens * 0.2),
-                "totalTokens": gemini_total_tokens
-            },
-            "Claude Sonnet 4.6 (Thinking)": {
-                "inputTokens": int(claude_total_tokens * 0.8),
-                "outputTokens": int(claude_total_tokens * 0.2),
-                "totalTokens": claude_total_tokens
-            }
-        },
+        "modelUsage": model_usage,
+        "tokenStatsSource": "conversation-db",
+        "tokenStatsSkipped": skipped,
         "limits": limits,
         "tierLabel": tier_label,
-        "usageStatusText": "",
-        "authHelpText": f"Logged in as {user_email}"
+        "usageStatusText": quota_status,
+        "quotaSource": "agy-usage" if any(not entry["unknown"] for entry in limits) else "unavailable",
+        "email": user_email,
+        "authHelpText": quota_help
     }
 
     output_json = json.dumps(record, separators=(",", ":"))
@@ -262,4 +372,11 @@ def main():
         print(json.dumps(record, indent=2))
 
 if __name__ == "__main__":
-    main()
+    USAGE_DIR.mkdir(parents=True, exist_ok=True)
+    # Timer and popup refresh may run concurrently; allow only one CLI fetch.
+    with (USAGE_DIR / ".antigravity.lock").open("w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            sys.exit(0)
+        main()

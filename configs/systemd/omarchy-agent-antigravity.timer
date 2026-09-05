@@ -2,8 +2,9 @@
 Description=Periodic timer to update Antigravity agent usage for Omarchy
 
 [Timer]
-OnBootSec=1min
-OnUnitActiveSec=2min
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
 Persistent=true
 
 [Install]

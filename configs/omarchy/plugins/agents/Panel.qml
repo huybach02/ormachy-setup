@@ -116,7 +116,8 @@ Panel {
     for (var i = 0; i < list.length; i++) {
       var entry = list[i] || {}
       var percent = Number(entry.percent)
-      if (percent >= 0) out.push(limitWindow(entry.label, percent, entry.resetsAt, entry.title))
+      if (entry.unknown === true) percent = -1
+      if (percent >= 0 || entry.unknown === true) out.push(limitWindow(entry.label, percent, entry.resetsAt, entry.title))
     }
     return out
   }
@@ -127,7 +128,7 @@ Panel {
     var windows = limitWindows(p)
     var best = null
     for (var i = 0; i < windows.length; i++) {
-      if (!best || windows[i].percent > best.percent) best = windows[i]
+      if (windows[i].percent >= 0 && (!best || windows[i].percent > best.percent)) best = windows[i]
     }
     return best
   }
@@ -301,11 +302,9 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  onProviderIndexChanged: if (panelFlick) panelFlick.contentY = 0
   onOpenedChanged: if (opened) {
     cursorActive = false
     nowMs = Date.now()
-    if (panelFlick) panelFlick.contentY = 0
     usage.refreshLimits()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
@@ -358,7 +357,7 @@ Panel {
     contentWidth: panel.fittedContentWidth(Style.space(380))
     // Taller than the control panels on purpose: this one is a dashboard, and
     // the whole point is reading limits and history without scrolling.
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -369,29 +368,23 @@ Panel {
           root.cursorActive = true
           root.selectProvider(root.providerIndex + dx)
         }
-        if (dy !== 0)
-          panelFlick.contentY = root.clamp(panelFlick.contentY + dy * Style.space(56), 0,
-                                           Math.max(0, panelFlick.contentHeight - panelFlick.height))
+
       }
       onActivateRequested: root.refreshNow()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) { if (t === "r" || t === "R") root.refreshNow() }
 
-      Flickable {
+      Item {
         id: panelFlick
         anchors.fill: parent
-        contentWidth: width
-        contentHeight: column.implicitHeight
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        flickableDirection: Flickable.VerticalFlick
-        interactive: contentHeight > height
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
         Column {
           id: column
           width: panelFlick.width
+          // Fit unusually tall content on smaller screens without scrolling.
+          scale: implicitHeight > 0 ? Math.min(1, panelFlick.height / implicitHeight) : 1
+          transformOrigin: Item.TopLeft
           spacing: Style.space(12)
 
           // ---------- Hero: provider mark · name · plan ----------
@@ -492,6 +485,18 @@ Panel {
                 onHovered: function(isHovered) { if (isHovered) root.cursorActive = true }
               }
             }
+          }
+
+          Button {
+            width: parent.width
+            text: usage.refreshing ? "Refreshing…" : "Refresh"
+            enabled: !usage.refreshing
+            bordered: true
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            verticalPadding: Style.spacing.controlPaddingY
+            onClicked: root.refreshNow()
           }
 
           // ---------- Account / Email Badge ----------
