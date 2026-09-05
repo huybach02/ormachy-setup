@@ -33,6 +33,8 @@ omarchy-setup/
 │   └── systemd/
 │       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
 │       ├── omarchy-agent-antigravity.timer   # Timer chạy mỗi 30 giây
+│       ├── tmpfiles.d/
+│       │   └── omarchy-media.conf            # Đảm bảo /run/media tồn tại khi boot
 │       └── user/
 │           └── omarchy-fcitx5.service.d/
 │               └── override.conf             # Kích hoạt StatusNotifierItem cho fcitx5
@@ -63,9 +65,10 @@ omarchy-setup/
 ./setup.sh php          # Cài đặt môi trường PHP (8.5 & 8.3), Composer, extensions & php-switch
 ./setup.sh node         # Cài đặt Node.js, trình quản lý fnm, Corepack (pnpm & yarn)
 ./setup.sh symfony      # Cài đặt Symfony CLI, kích hoạt iconv & bash completion
+./setup.sh automount    # Cấu hình tự động mount ổ đĩa dữ liệu (/dev/sda5) khi boot
 ```
 
-Lệnh `browser` ưu tiên Edge Stable, sau đó Beta và Dev nếu có. Bước này cũng tự chạy trong `packages` và `all`, cập nhật các liên kết web/HTML bằng XDG mà vẫn giữ các ứng dụng mặc định khác. Nếu chưa cài Edge, chạy `./setup.sh packages` trước.
+Lệnh `browser` ưu tiên Edge Stable, sau đó Beta và Dev nếu có. Bước này cũng tự chạy trong `packages` và `all`, cập nhật các liên kết web/HTML bằng XDG mà vẫn giữ các ứng dụng mặc định khác. Nếu chưa cài Edge, chạy `./setup.sh packages` trước. Lệnh `automount` cấu hình phân vùng `/dev/sda5` (UUID `8E3A42193A41FEA9`) vào `/run/media/$USER/8E3A42193A41FEA9` an toàn với quyền user và hỗ trợ boot không bị treo (`nofail`).
 
 ### 3. Quản lý & Chuyển đổi phiên bản PHP (`php-switch` / `sphp`)
 Môi trường PHP hỗ trợ chuyển đổi nhanh giữa các phiên bản (mặc định là PHP 8.5, kèm sẵn PHP 8.3):
@@ -125,6 +128,14 @@ symfony new my_project_directory --webapp
 cd my_project_directory
 symfony server:start
 ```
+
+### 6. Tự động mount ổ đĩa dữ liệu (`setup.sh automount`)
+Cấu hình tự động mount phân vùng dữ liệu NTFS `/dev/sda5` (UUID `8E3A42193A41FEA9`) vào `/run/media/$USER/8E3A42193A41FEA9` mỗi khi khởi động máy:
+```bash
+./setup.sh automount
+```
+* **Tự động cấp quyền thư mục**: Sử dụng cấu hình `/etc/tmpfiles.d/omarchy-media.conf` để hệ thống tự tạo `/run/media/$USER` với quyền sở hữu `0750` ngay khi boot trước khi mount unit chạy.
+* **Tối ưu hóa NTFS**: Sử dụng driver `ntfs3` của Linux kernel với các cờ `nofail`, `windows_names`, `iocharset=utf8`, `uid=1000`, `gid=1000`, giúp đọc/ghi file tiếng Việt trơn tru và không làm treo boot nếu ổ đĩa không kết nối.
 
 ## Lưu ý an toàn
 * **Xác thực 1 lần (Sudo Keep-Alive)**: Script chỉ yêu cầu nhập mật khẩu root/sudo đúng 1 lần ở đầu phiên chạy và tự động duy trì quyền hạn trong nền (tự huỷ ngay khi script kết thúc), không hỏi lại mật khẩu nhiều lần. Các tác vụ không yêu cầu quyền root (monitors, keybindings, looknfeel, sysinfo, workspaces) sẽ hoàn toàn không hỏi mật khẩu.

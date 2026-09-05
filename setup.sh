@@ -231,6 +231,19 @@ setup_browser() {
         xdg-mime default "$desktop_id" "$mime"
     done
 
+    if command -v omarchy &>/dev/null; then
+        omarchy default browser edge &>/dev/null || true
+    fi
+
+    # Cấu hình BROWSER trong ~/.bashrc
+    if [ -f "${HOME}/.bashrc" ] && ! grep -q 'export BROWSER=' "${HOME}/.bashrc"; then
+        if grep -q 'export EDITOR=' "${HOME}/.bashrc"; then
+            sed -i '/export EDITOR=/a export BROWSER="microsoft-edge"' "${HOME}/.bashrc"
+        else
+            sed -i '1i export BROWSER="microsoft-edge"' "${HOME}/.bashrc"
+        fi
+    fi
+
     log_success "Đã đặt Microsoft Edge (${desktop_id}) làm trình duyệt mặc định cho Omarchy, liên kết web và HTML!"
 }
 
@@ -908,6 +921,66 @@ setup_symfony() {
     log_success "Hoàn tất cài đặt Symfony CLI! Phiên bản: ${symfony_ver}"
 }
 
+# --- Module: Automount Storage Partitions ---
+setup_automount() {
+    log_info "Bắt đầu cấu hình tự động mount phân vùng ổ đĩa (/dev/sda5 - UUID=8E3A42193A41FEA9)..."
+
+    local current_user="${SUDO_USER:-$USER}"
+    local current_uid
+    local current_gid
+    current_uid="$(id -u "$current_user" 2>/dev/null || echo 1000)"
+    current_gid="$(id -g "$current_user" 2>/dev/null || echo 1000)"
+
+    local partition_uuid="8E3A42193A41FEA9"
+    local mount_point="/run/media/${current_user}/${partition_uuid}"
+    local fstab_entry="UUID=${partition_uuid}  ${mount_point}  ntfs3  defaults,uid=${current_uid},gid=${current_gid},dmask=022,fmask=133,iocharset=utf8,windows_names,nofail,x-systemd.device-timeout=10s  0  0"
+
+    init_sudo
+
+    # 1. Cấu hình tmpfiles.d để tự động tạo thư mục /run/media/<user> sau mỗi lần boot
+    local tmpfiles_conf="/etc/tmpfiles.d/omarchy-media.conf"
+    local tmpfiles_source="${CONFIGS_DIR}/systemd/tmpfiles.d/omarchy-media.conf"
+
+    if [ ! -f "$tmpfiles_conf" ] || ! grep -q "/run/media/${current_user}" "$tmpfiles_conf" 2>/dev/null; then
+        log_info "Tạo cấu hình ${tmpfiles_conf}..."
+        {
+            echo "d /run/media 0755 root root -"
+            echo "d /run/media/${current_user} 0750 ${current_user} ${current_user} -"
+        } | sudo tee "$tmpfiles_conf" >/dev/null
+        sudo systemd-tmpfiles --create "$tmpfiles_conf" 2>/dev/null || true
+        log_success "Đã tạo cấu hình tmpfiles.d tại ${tmpfiles_conf}."
+    else
+        log_info "Cấu hình ${tmpfiles_conf} đã sẵn sàng."
+    fi
+
+    # Đảm bảo mount point tồn tại
+    sudo mkdir -p "$mount_point"
+    sudo chown "${current_user}:${current_user}" "$mount_point" 2>/dev/null || true
+
+    # 2. Cập nhật /etc/fstab nếu chưa có
+    if grep -q "UUID=${partition_uuid}" /etc/fstab; then
+        log_info "Mục mount UUID=${partition_uuid} đã có trong /etc/fstab."
+    else
+        log_info "Thêm mục mount UUID=${partition_uuid} vào /etc/fstab..."
+        backup_file "/etc/fstab"
+        echo -e "\n# Automount NTFS Data partition (/dev/sda5) for ${current_user}\n${fstab_entry}" | sudo tee -a /etc/fstab >/dev/null
+        log_success "Đã thêm cấu hình tự động mount vào /etc/fstab!"
+    fi
+
+    # 3. Reload systemd daemon và kích hoạt mount nếu chưa mount
+    sudo systemctl daemon-reload
+    if ! findmnt -M "$mount_point" &>/dev/null; then
+        log_info "Tiến hành mount ${mount_point}..."
+        if sudo mount "$mount_point" 2>/dev/null; then
+            log_success "Đã mount thành công ổ đĩa tại ${mount_point}!"
+        else
+            log_warn "Không thể mount ngay (có thể thiết bị không sẵn sàng). Hệ thống sẽ tự động mount khi khởi động."
+        fi
+    else
+        log_success "Ổ đĩa đã được mount và sẵn sàng tại ${mount_point}!"
+    fi
+}
+
 # --- Main Dispatcher ---
 main() {
     echo -e "${COLOR_INFO}==========================================${COLOR_RESET}"
@@ -959,6 +1032,9 @@ main() {
         symfony)
             setup_symfony
             ;;
+        automount|disks)
+            setup_automount
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -973,9 +1049,10 @@ main() {
             setup_php
             setup_nodejs
             setup_symfony
+            setup_automount
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony|automount]"
             exit 1
             ;;
     esac
