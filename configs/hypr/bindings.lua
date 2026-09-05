@@ -6,3 +6,7 @@
 
 -- Screenshot shortcut (Windows-like Super+Shift+S)
 o.bind("SUPER + SHIFT + S", "Screenshot", "omarchy-capture-screenshot")
+
+-- Clipboard history (Windows-like Super+V)
+hl.unbind("SUPER + V")
+o.bind("SUPER + V", "Clipboard manager", "omarchy-shell shell toggle omarchy.clipboard")
