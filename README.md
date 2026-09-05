@@ -123,6 +123,7 @@ symfony server:start
 ```
 
 ## Lưu ý an toàn
+* **Xác thực 1 lần (Sudo Keep-Alive)**: Script chỉ yêu cầu nhập mật khẩu root/sudo đúng 1 lần ở đầu phiên chạy và tự động duy trì quyền hạn trong nền (tự huỷ ngay khi script kết thúc), không hỏi lại mật khẩu nhiều lần. Các tác vụ không yêu cầu quyền root (monitors, keybindings, looknfeel, sysinfo, workspaces) sẽ hoàn toàn không hỏi mật khẩu.
 * Script luôn tự động sao lưu (`.bak.<timestamp>`) các file cấu hình cũ trước khi ghi đè.
 * Tự động reload Hyprland và kiểm tra lỗi cú pháp sau khi cập nhật.
 * Bạn có thể đưa thư mục này lên GitHub cá nhân (hoặc GitLab) để sau này cài mới máy chỉ cần:

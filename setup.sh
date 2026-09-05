@@ -41,6 +41,40 @@ backup_file() {
     fi
 }
 
+# --- Sudo Keep-Alive Helper ---
+start_sudo_keepalive() {
+    if [ -z "${SUDO_LOOP_PID:-}" ]; then
+        # Duy trì timestamp sudo trong background cho đến khi script hoàn tất
+        while true; do
+            sudo -n true
+            sleep 45
+            kill -0 "$$" || exit
+        done 2>/dev/null &
+        SUDO_LOOP_PID=$!
+        trap 'kill -9 "$SUDO_LOOP_PID" 2>/dev/null || true' EXIT HUP INT TERM
+    fi
+}
+
+init_sudo() {
+    # Nếu đang chạy bằng root thì không cần làm gì
+    [ "$EUID" -eq 0 ] && return 0
+
+    # Nếu sudo đã được cấp quyền và còn hạn, khởi động keepalive ngay
+    if sudo -n true 2>/dev/null; then
+        start_sudo_keepalive
+        return 0
+    fi
+
+    log_info "Yêu cầu quyền quản trị (sudo) - chỉ cần nhập mật khẩu 1 lần cho toàn bộ quá trình setup..."
+    if sudo -v; then
+        start_sudo_keepalive
+        log_success "Đã xác thực quyền sudo thành công!"
+    else
+        log_error "Xác thực sudo thất bại! Vui lòng kiểm tra lại mật khẩu."
+        exit 1
+    fi
+}
+
 # --- Module: Monitor & Workspace Monitor Rules ---
 setup_monitors() {
     log_info "Bắt đầu cấu hình màn hình và gán workspace (Philip: Trái/Primary, AOC: Phải/Secondary)..."
@@ -200,7 +234,7 @@ setup_packages() {
     log_info "Tiến hành cài đặt các gói còn thiếu: ${pkgs_to_install[*]}..."
     
     if command -v yay &>/dev/null; then
-        yay -S --needed --noconfirm --sudo pkexec "${pkgs_to_install[@]}"
+        yay -S --needed --noconfirm --sudoloop "${pkgs_to_install[@]}"
     elif command -v omarchy &>/dev/null; then
         omarchy pkg aur add "${pkgs_to_install[@]}"
     else
@@ -420,7 +454,7 @@ setup_vietnamese_input() {
     if ! pacman -Q fcitx5-lotus &>/dev/null && ! pacman -Q fcitx5-lotus-bin &>/dev/null; then
         log_info "Đang cài đặt fcitx5-lotus-bin..."
         if command -v yay &>/dev/null; then
-            yay -S --needed --noconfirm --sudo pkexec fcitx5-lotus-bin
+            yay -S --needed --noconfirm --sudoloop fcitx5-lotus-bin
         elif command -v omarchy &>/dev/null; then
             omarchy pkg aur add fcitx5-lotus-bin
         fi
@@ -431,11 +465,7 @@ setup_vietnamese_input() {
     # 2. Kích hoạt và chạy service fcitx5-lotus-server@<user>
     if ! systemctl is-active --quiet "fcitx5-lotus-server@${user}.service"; then
         log_info "Kích hoạt systemd service fcitx5-lotus-server@${user}..."
-        if command -v pkexec &>/dev/null; then
-            pkexec systemctl enable --now "fcitx5-lotus-server@${user}.service"
-        else
-            sudo systemctl enable --now "fcitx5-lotus-server@${user}.service"
-        fi
+        sudo systemctl enable --now "fcitx5-lotus-server@${user}.service"
         log_success "Đã kích hoạt fcitx5-lotus-server@${user}.service"
     fi
 
@@ -634,7 +664,7 @@ setup_nodejs() {
     else
         log_warn "Gói fnm chưa được cài đặt, tiến hành cài đặt..."
         if command -v yay &>/dev/null; then
-            yay -S --needed --noconfirm --sudo pkexec fnm
+            yay -S --needed --noconfirm --sudoloop fnm
         elif command -v pacman &>/dev/null; then
             sudo pacman -S --needed --noconfirm fnm
         fi
@@ -710,7 +740,7 @@ setup_symfony() {
     else
         log_warn "Gói symfony-cli chưa được cài đặt, tiến hành cài đặt..."
         if command -v yay &>/dev/null; then
-            yay -S --needed --noconfirm --sudo pkexec symfony-cli
+            yay -S --needed --noconfirm --sudoloop symfony-cli
         elif command -v pacman &>/dev/null; then
             sudo pacman -S --needed --noconfirm symfony-cli
         fi
@@ -720,8 +750,7 @@ setup_symfony() {
     for ini in /etc/php/php.ini /etc/php-legacy/php.ini; do
         if [ -f "$ini" ] && ! grep -q "^extension=iconv" "$ini"; then
             log_info "Kích hoạt extension iconv trong $ini..."
-            sudo sed -i -E 's/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*iconv/extension=iconv/' "$ini" 2>/dev/null || \
-            pkexec sed -i -E 's/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*iconv/extension=iconv/' "$ini" 2>/dev/null || true
+            sudo sed -i -E 's/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*iconv/extension=iconv/' "$ini"
         fi
     done
 
@@ -757,6 +786,7 @@ main() {
             setup_keybindings
             ;;
         packages)
+            init_sudo
             setup_packages
             ;;
         apps)
@@ -772,18 +802,23 @@ main() {
             setup_sysinfo
             ;;
         vietnamese|input)
+            init_sudo
             setup_vietnamese_input
             ;;
         php)
+            init_sudo
             setup_php
             ;;
         node|nodejs)
+            init_sudo
             setup_nodejs
             ;;
         symfony)
+            init_sudo
             setup_symfony
             ;;
         all)
+            init_sudo
             setup_monitors
             setup_workspaces
             setup_keybindings
