@@ -11,9 +11,12 @@ omarchy-setup/
 │   │   ├── omarchy-agent-usage-antigravity # Script thu thập quota/token Antigravity
 │   │   ├── omarchy-agent-usage-update      # Wrapper cập nhật usage và trích xuất email
 │   │   └── omarchy-sysinfo                 # Thu thập thông số CPU, RAM, Disk, GPU cho bar
+│   ├── fcitx5/
+│   │   ├── config         # Phím tắt chuyển bộ gõ (Alt+Shift_L)
+│   │   └── profile        # Cấu hình bộ gõ tiếng Việt Fcitx5 Lotus
 │   ├── hypr/
 │   │   ├── autostart.lua  # Tự động mở các ứng dụng khi đăng nhập
-│   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V)
+│   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
 │   │   ├── looknfeel.lua  # Cấu hình giao diện, không viền trống (gaps = 0)
 │   │   ├── monitors.lua   # 2 màn hình (Philip Trái/Primary, AOC Phải/Secondary)
 │   │   └── windows.lua    # Window rules gán cửa sổ ứng dụng vào workspace
@@ -43,12 +46,13 @@ omarchy-setup/
 ```bash
 ./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
-./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V)
+./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
 ./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
 ./setup.sh agent_quota  # Tích hợp hiển thị quota Antigravity trên widget Agents
 ./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
+./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)
 ```
 
 ## Lưu ý an toàn

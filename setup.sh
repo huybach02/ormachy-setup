@@ -398,8 +398,84 @@ setup_sysinfo() {
     fi
 }
 
-# --- Placeholder cho các bước setup sắp tới ---
-# setup_vietnamese_input() { ... }
+# --- Module: Vietnamese Input Method (Fcitx5 + Lotus) ---
+setup_vietnamese_input() {
+    log_info "Bắt đầu cấu hình bộ gõ tiếng Việt Fcitx5 Lotus và phím tắt Alt + Left Shift..."
+    
+    local user="${USER:-$(id -un)}"
+    local fcitx_dir="${HOME}/.config/fcitx5"
+    local hypr_dir="${HOME}/.config/hypr"
+    mkdir -p "$fcitx_dir" "$hypr_dir"
+
+    # 1. Cài đặt fcitx5-lotus-bin nếu chưa có
+    if ! pacman -Q fcitx5-lotus &>/dev/null && ! pacman -Q fcitx5-lotus-bin &>/dev/null; then
+        log_info "Đang cài đặt fcitx5-lotus-bin..."
+        if command -v yay &>/dev/null; then
+            yay -S --needed --noconfirm --sudo pkexec fcitx5-lotus-bin
+        elif command -v omarchy &>/dev/null; then
+            omarchy pkg aur add fcitx5-lotus-bin
+        fi
+    else
+        log_info "fcitx5-lotus đã được cài đặt."
+    fi
+
+    # 2. Kích hoạt và chạy service fcitx5-lotus-server@<user>
+    if ! systemctl is-active --quiet "fcitx5-lotus-server@${user}.service"; then
+        log_info "Kích hoạt systemd service fcitx5-lotus-server@${user}..."
+        if command -v pkexec &>/dev/null; then
+            pkexec systemctl enable --now "fcitx5-lotus-server@${user}.service"
+        else
+            sudo systemctl enable --now "fcitx5-lotus-server@${user}.service"
+        fi
+        log_success "Đã kích hoạt fcitx5-lotus-server@${user}.service"
+    fi
+
+    # 3. Đồng bộ file profile & config cho fcitx5
+    local source_profile="${CONFIGS_DIR}/fcitx5/profile"
+    local target_profile="${fcitx_dir}/profile"
+    if [ -f "$source_profile" ]; then
+        backup_file "$target_profile"
+        cp "$source_profile" "$target_profile"
+        log_success "Đã cập nhật ${target_profile}"
+    fi
+
+    local source_config="${CONFIGS_DIR}/fcitx5/config"
+    local target_config="${fcitx_dir}/config"
+    if [ -f "$source_config" ]; then
+        backup_file "$target_config"
+        cp "$source_config" "$target_config"
+        log_success "Đã cập nhật ${target_config}"
+    fi
+
+    # 4. Cập nhật phím tắt Alt + Shift_L trong bindings.lua
+    local source_bindings="${CONFIGS_DIR}/hypr/bindings.lua"
+    local target_bindings="${hypr_dir}/bindings.lua"
+    if [ -f "$source_bindings" ]; then
+        backup_file "$target_bindings"
+        cp "$source_bindings" "$target_bindings"
+        log_success "Đã cập nhật ${target_bindings}"
+    fi
+
+    # 5. Reload Hyprland
+    if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
+        log_info "Đang reload cấu hình Hyprland..."
+        hyprctl reload
+        local errors
+        errors="$(hyprctl configerrors 2>&1 || true)"
+        if [ -n "$errors" ] && [ "$errors" != "ok" ]; then
+            log_warn "Hyprland cảnh báo lỗi cấu hình:\n${errors}"
+        else
+            log_success "Hyprland đã reload thành công mà không có lỗi!"
+        fi
+    fi
+
+    # 6. Khởi động lại service fcitx5
+    if systemctl --user is-active --quiet omarchy-fcitx5.service 2>/dev/null; then
+        log_info "Đang khởi động lại dịch vụ fcitx5..."
+        systemctl --user restart omarchy-fcitx5.service
+        log_success "Dịch vụ fcitx5 đã được khởi động lại thành công!"
+    fi
+}
 
 # --- Main Dispatcher ---
 main() {
@@ -434,6 +510,9 @@ main() {
         sysinfo)
             setup_sysinfo
             ;;
+        vietnamese|input)
+            setup_vietnamese_input
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -443,9 +522,10 @@ main() {
             setup_looknfeel
             setup_agent_quota
             setup_sysinfo
+            setup_vietnamese_input
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese]"
             exit 1
             ;;
     esac

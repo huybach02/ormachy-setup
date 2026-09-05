@@ -10,3 +10,7 @@ o.bind("SUPER + SHIFT + S", "Screenshot", "omarchy-capture-screenshot")
 -- Clipboard history (Windows-like Super+V)
 hl.unbind("SUPER + V")
 o.bind("SUPER + V", "Clipboard manager", "omarchy-shell shell toggle omarchy.clipboard")
+
+-- Toggle Vietnamese input method (Alt + Left Shift)
+o.bind("ALT + Shift_L", "Toggle Vietnamese Input", "fcitx5-remote -t")
+
