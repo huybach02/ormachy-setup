@@ -107,9 +107,41 @@ setup_workspaces() {
     fi
 }
 
+# --- Module: Keybindings ---
+setup_keybindings() {
+    log_info "Bắt đầu cấu hình phím tắt (Super+Shift+S: Chụp ảnh màn hình)..."
+    
+    local target_dir="${HOME}/.config/hypr"
+    local target_file="${target_dir}/bindings.lua"
+    local source_file="${CONFIGS_DIR}/hypr/bindings.lua"
+    
+    if [ ! -f "$source_file" ]; then
+        log_error "Không tìm thấy file nguồn: ${source_file}"
+        return 1
+    fi
+    
+    mkdir -p "$target_dir"
+    backup_file "$target_file"
+    
+    cp "$source_file" "$target_file"
+    log_success "Đã cập nhật ${target_file}"
+    
+    # Reload Hyprland nếu đang chạy trong session Hyprland
+    if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
+        log_info "Đang reload cấu hình Hyprland..."
+        hyprctl reload
+        local errors
+        errors="$(hyprctl configerrors 2>&1 || true)"
+        if [ -n "$errors" ] && [ "$errors" != "ok" ]; then
+            log_warn "Hyprland cảnh báo lỗi cấu hình:\n${errors}"
+        else
+            log_success "Hyprland đã reload thành công mà không có lỗi!"
+        fi
+    fi
+}
+
 # --- Placeholder cho các bước setup sắp tới ---
 # setup_vietnamese_input() { ... }
-# setup_keybindings() { ... }
 # setup_looknfeel() { ... }
 # setup_packages() { ... }
 
@@ -128,13 +160,17 @@ main() {
         workspaces)
             setup_workspaces
             ;;
+        keybindings)
+            setup_keybindings
+            ;;
         all)
             setup_monitors
             setup_workspaces
+            setup_keybindings
             # Các module tiếp theo sẽ được gọi ở đây
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings]"
             exit 1
             ;;
     esac
