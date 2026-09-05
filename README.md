@@ -23,7 +23,10 @@ omarchy-setup/
 
 ### 2. Áp dụng riêng từng phần
 ```bash
-./setup.sh monitors     # Chỉ áp dụng cấu hình màn hình
+./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải)
+./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
+./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V)
+./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher)
 ```
 
 ## Lưu ý an toàn

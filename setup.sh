@@ -140,10 +140,71 @@ setup_keybindings() {
     fi
 }
 
+# --- Module: Packages & Applications ---
+setup_packages() {
+    log_info "Bắt đầu kiểm tra và cài đặt các ứng dụng cần thiết..."
+    
+    # Danh sách phần mềm yêu cầu:
+    # 1. Visual Studio Code (visual-studio-code-bin)
+    # 2. Microsoft Edge (microsoft-edge-stable-bin)
+    # 3. Helium Browser (helium-browser-bin)
+    # 4. AppImageLauncher (appimagelauncher-beta-bin)
+    local pkgs_to_install=()
+    
+    # 1. VS Code
+    if pacman -Q visual-studio-code-bin &>/dev/null || pacman -Q code &>/dev/null; then
+        log_info "VSCode đã được cài đặt."
+    else
+        log_warn "VSCode chưa được cài đặt."
+        pkgs_to_install+=("visual-studio-code-bin")
+    fi
+    
+    # 2. Microsoft Edge
+    if pacman -Q microsoft-edge-stable-bin &>/dev/null || pacman -Q microsoft-edge-dev-bin &>/dev/null || pacman -Q microsoft-edge-beta-bin &>/dev/null; then
+        log_info "Microsoft Edge đã được cài đặt."
+    else
+        log_warn "Microsoft Edge chưa được cài đặt."
+        pkgs_to_install+=("microsoft-edge-stable-bin")
+    fi
+    
+    # 3. Helium Browser
+    if pacman -Q helium-browser-bin &>/dev/null || pacman -Q helium-browser-beta-bin &>/dev/null; then
+        log_info "Helium Browser đã được cài đặt."
+    else
+        log_warn "Helium Browser chưa được cài đặt."
+        pkgs_to_install+=("helium-browser-bin")
+    fi
+    
+    # 4. AppImageLauncher
+    if pacman -Q appimagelauncher &>/dev/null || pacman -Q appimagelauncher-beta-bin &>/dev/null || pacman -Q appimagelauncher-bin &>/dev/null; then
+        log_info "AppImageLauncher đã được cài đặt."
+    else
+        log_warn "AppImageLauncher chưa được cài đặt."
+        pkgs_to_install+=("appimagelauncher-beta-bin")
+    fi
+    
+    if [ ${#pkgs_to_install[@]} -eq 0 ]; then
+        log_success "Tất cả các phần mềm yêu cầu (VSCode, Edge, Helium, AppImageLauncher) đều đã có trên hệ thống!"
+        return 0
+    fi
+    
+    log_info "Tiến hành cài đặt các gói còn thiếu: ${pkgs_to_install[*]}..."
+    
+    if command -v yay &>/dev/null; then
+        yay -S --needed --noconfirm "${pkgs_to_install[@]}"
+    elif command -v omarchy &>/dev/null; then
+        omarchy pkg aur add "${pkgs_to_install[@]}"
+    else
+        log_error "Không tìm thấy yay hoặc omarchy để cài đặt gói AUR!"
+        return 1
+    fi
+    
+    log_success "Đã cài đặt xong tất cả phần mềm!"
+}
+
 # --- Placeholder cho các bước setup sắp tới ---
 # setup_vietnamese_input() { ... }
 # setup_looknfeel() { ... }
-# setup_packages() { ... }
 
 # --- Main Dispatcher ---
 main() {
@@ -163,14 +224,17 @@ main() {
         keybindings)
             setup_keybindings
             ;;
+        packages)
+            setup_packages
+            ;;
         all)
             setup_monitors
             setup_workspaces
             setup_keybindings
-            # Các module tiếp theo sẽ được gọi ở đây
+            setup_packages
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages]"
             exit 1
             ;;
     esac
