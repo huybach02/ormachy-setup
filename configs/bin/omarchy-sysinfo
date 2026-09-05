@@ -156,7 +156,7 @@ case "$MODE" in
     ram)
         IFS='|' read -r r_pct r_klass r_used r_total < <(get_ram)
         jq -nc \
-            --arg text "Ram: ${r_pct}% (${r_used}/${r_total})" \
+            --arg text "Ram: ${r_pct}% (${r_used} / ${r_total})" \
             --arg tooltip "RAM: ${r_used} / ${r_total} (${r_pct}%)" \
             --arg class "$r_klass" \
             '{"text": $text, "tooltip": $tooltip, "class": $class}'
@@ -165,7 +165,7 @@ case "$MODE" in
     disk)
         IFS='|' read -r d_pct d_klass d_used d_total < <(get_disk)
         jq -nc \
-            --arg text "Disk: ${d_pct} (${d_used}/${d_total})" \
+            --arg text "Disk: ${d_pct} (${d_used} / ${d_total})" \
             --arg tooltip "Disk (/): ${d_used} / ${d_total} (${d_pct})" \
             --arg class "$d_klass" \
             '{"text": $text, "tooltip": $tooltip, "class": $class}'
@@ -195,7 +195,7 @@ case "$MODE" in
             overall_class="active"
         fi
 
-        text="CPU: ${c_pct}%  Ram: ${r_pct}% (${r_used}/${r_total})  Disk: ${d_pct} (${d_used}/${d_total})  GPU: ${g_pct}"
+        text="CPU: ${c_pct}%  Ram: ${r_pct}% (${r_used} / ${r_total})  Disk: ${d_pct} (${d_used} / ${d_total})  GPU: ${g_pct}"
         tooltip="CPU: ${c_pct}% (${c_model})\nRAM: ${r_used} / ${r_total} (${r_pct}%)\nDisk (/): ${d_used} / ${d_total} (${d_pct})\nGPU: ${g_pct} (${g_name}, ${g_temp}, VRAM: ${g_vram})"
 
         jq -nc \

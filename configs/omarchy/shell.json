@@ -28,8 +28,11 @@
           "verticalFormat": "HH\n—\nmm"
         },
         {
+          "id": "omarchy.weather"
+        },
+        {
           "id": "omarchy.spacer",
-          "size": 32
+          "size": 64
         },
         {
           "id": "sys-cpu",
@@ -65,9 +68,6 @@
         },
         {
           "id": "omarchy.keyboard-layout"
-        },
-        {
-          "id": "omarchy.weather"
         },
         {
           "id": "omarchy.system-update"
