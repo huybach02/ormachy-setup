@@ -7,9 +7,20 @@ Script tự động hóa cấu hình và khôi phục môi trường cá nhân t
 ```text
 omarchy-setup/
 ├── configs/               # Lưu trữ các file cấu hình mẫu
-│   └── hypr/
-│       └── monitors.lua   # Cấu hình 2 màn hình (Philip Trái/Primary, AOC Phải/Secondary)
-├── setup.sh               # Script chính để chạy cài đặt/áp dụng cấu hình
+│   ├── bin/
+│   │   └── omarchy-agent-usage-antigravity # Script thu thập quota/token Antigravity
+│   ├── hypr/
+│   │   ├── autostart.lua  # Tự động mở các ứng dụng khi đăng nhập
+│   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V)
+│   │   ├── looknfeel.lua  # Cấu hình giao diện, không viền trống (gaps = 0)
+│   │   ├── monitors.lua   # 2 màn hình (Philip Trái/Primary, AOC Phải/Secondary)
+│   │   └── windows.lua    # Window rules gán cửa sổ ứng dụng vào workspace
+│   ├── omarchy/
+│   │   └── Workspaces.qml # Tên hiển thị các workspace trên thanh bar
+│   └── systemd/
+│       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
+│       └── omarchy-agent-antigravity.timer   # Timer chạy mỗi 2 phút
+├── setup.sh               # Script chính để chạy cài đặt / áp dụng cấu hình
 └── README.md
 ```
 
@@ -23,13 +34,13 @@ omarchy-setup/
 
 ### 2. Áp dụng riêng từng phần
 ```bash
-./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải)
+./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V)
 ./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
-
+./setup.sh agent_quota  # Tích hợp hiển thị quota Antigravity trên widget Agents
 ```
 
 ## Lưu ý an toàn

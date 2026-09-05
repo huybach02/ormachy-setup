@@ -284,6 +284,51 @@ setup_looknfeel() {
     fi
 }
 
+# --- Module: Agent Quota & Usage (Antigravity & Codex) ---
+setup_agent_quota() {
+    log_info "Bắt đầu cấu hình theo dõi Quota cho Antigravity Agent..."
+    
+    local bin_dir="${HOME}/.local/bin"
+    local systemd_dir="${HOME}/.config/systemd/user"
+    mkdir -p "$bin_dir" "$systemd_dir"
+    
+    # 1. Cài đặt script collector cho Antigravity
+    local target_collector="${bin_dir}/omarchy-agent-usage-antigravity"
+    local source_collector="${CONFIGS_DIR}/bin/omarchy-agent-usage-antigravity"
+    if [ -f "$source_collector" ]; then
+        cp "$source_collector" "$target_collector"
+        chmod +x "$target_collector"
+        log_success "Đã cập nhật ${target_collector}"
+    fi
+    
+    # 2. Cài đặt systemd user service và timer
+    local target_service="${systemd_dir}/omarchy-agent-antigravity.service"
+    local source_service="${CONFIGS_DIR}/systemd/omarchy-agent-antigravity.service"
+    local target_timer="${systemd_dir}/omarchy-agent-antigravity.timer"
+    local source_timer="${CONFIGS_DIR}/systemd/omarchy-agent-antigravity.timer"
+    
+    if [ -f "$source_service" ] && [ -f "$source_timer" ]; then
+        cp "$source_service" "$target_service"
+        cp "$source_timer" "$target_timer"
+        
+        systemctl --user daemon-reload
+        systemctl --user enable --now omarchy-agent-antigravity.timer
+        log_success "Đã kích hoạt systemd timer cập nhật quota tự động!"
+    fi
+    
+    # 3. Chạy cập nhật ngay lần đầu
+    if [ -x "$target_collector" ]; then
+        log_info "Đang thu thập dữ liệu quota Antigravity..."
+        "$target_collector"
+    fi
+    
+    # 4. Refresh Omarchy shell agents panel nếu đang chạy
+    if command -v omarchy-shell &>/dev/null && pgrep quickshell &>/dev/null; then
+        omarchy-shell omarchy.agents refresh &>/dev/null || true
+        log_success "Đã refresh widget Agents trên thanh bar!"
+    fi
+}
+
 # --- Placeholder cho các bước setup sắp tới ---
 # setup_vietnamese_input() { ... }
 
@@ -314,6 +359,9 @@ main() {
         looknfeel)
             setup_looknfeel
             ;;
+        agent_quota)
+            setup_agent_quota
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -321,9 +369,10 @@ main() {
             setup_packages
             setup_apps
             setup_looknfeel
+            setup_agent_quota
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota]"
             exit 1
             ;;
     esac

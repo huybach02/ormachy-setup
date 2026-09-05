@@ -1,0 +1,8 @@
+[Unit]
+Description=Update Antigravity agent usage and quota for Omarchy
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-agent-usage-antigravity
+Restart=no
