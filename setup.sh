@@ -450,6 +450,9 @@ setup_looknfeel() {
     cp "$source_looknfeel" "$target_looknfeel"
     log_success "Đã cập nhật ${target_looknfeel}"
     
+    # Cấu hình font size terminal
+    setup_terminal
+
     # Reload Hyprland nếu đang chạy
     if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
         log_info "Đang reload cấu hình Hyprland..."
@@ -462,6 +465,56 @@ setup_looknfeel() {
             log_success "Hyprland đã reload thành công mà không có lỗi!"
         fi
     fi
+}
+
+# --- Module: Terminal Appearance & Font Size ---
+setup_terminal() {
+    log_info "Bắt đầu cấu hình font chữ terminal (JetBrainsMono Nerd Font size = 12)..."
+
+    local font_size=12
+
+    # 1. Cấu hình Foot terminal
+    local foot_dir="${HOME}/.config/foot"
+    local target_foot="${foot_dir}/foot.ini"
+    local source_foot="${CONFIGS_DIR}/foot/foot.ini"
+    mkdir -p "$foot_dir"
+    if [ -f "$source_foot" ]; then
+        backup_file "$target_foot"
+        cp "$source_foot" "$target_foot"
+        log_success "Đã đồng bộ ${target_foot} (font size ${font_size})!"
+    elif [ -f "$target_foot" ]; then
+        backup_file "$target_foot"
+        sed -i -E "s/^(font=.*:size=)[0-9]+/\\1${font_size}/" "$target_foot"
+        log_success "Đã cập nhật font size ${font_size} trong ${target_foot}"
+    fi
+
+    # 2. Cập nhật các terminal khác nếu có (Alacritty, Kitty, Ghostty)
+    local alacritty_cfg="${HOME}/.config/alacritty/alacritty.toml"
+    local kitty_cfg="${HOME}/.config/kitty/kitty.conf"
+    local ghostty_cfg="${HOME}/.config/ghostty/config"
+
+    if [ -f "$alacritty_cfg" ]; then
+        backup_file "$alacritty_cfg"
+        sed -i -E "s/^(size = )[0-9]+/\\1${font_size}/" "$alacritty_cfg"
+    fi
+
+    if [ -f "$kitty_cfg" ]; then
+        backup_file "$kitty_cfg"
+        sed -i -E "s/^(font_size[[:space:]]+)[0-9]+(\.[0-9]+)?/\\1${font_size}.0/" "$kitty_cfg"
+    fi
+
+    if [ -f "$ghostty_cfg" ]; then
+        backup_file "$ghostty_cfg"
+        sed -i -E "s/^(font-size = )[0-9]+/\\1${font_size}/" "$ghostty_cfg"
+    fi
+
+    # 3. Reload terminal nếu đang chạy
+    if command -v omarchy &>/dev/null; then
+        omarchy restart terminal &>/dev/null || true
+    fi
+    killall -SIGUSR1 foot 2>/dev/null || true
+
+    log_success "Đã thiết lập font size ${font_size} cho terminal hoàn tất!"
 }
 
 # --- Module: Agent Quota & Usage (Antigravity & Codex) ---
@@ -1076,6 +1129,9 @@ main() {
         looknfeel)
             setup_looknfeel
             ;;
+        terminal)
+            setup_terminal
+            ;;
         agent_quota)
             setup_agent_quota
             ;;
@@ -1118,7 +1174,7 @@ main() {
             setup_autocompletion
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|agent_quota|sysinfo|vietnamese|php|node|symfony|automount|autocompletion]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|terminal|agent_quota|sysinfo|vietnamese|php|node|symfony|automount|autocompletion]"
             exit 1
             ;;
     esac

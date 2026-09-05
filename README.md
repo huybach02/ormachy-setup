@@ -17,6 +17,8 @@ omarchy-setup/
 │   ├── fcitx5/
 │   │   ├── config         # Phím tắt chuyển bộ gõ (Alt+Shift_L)
 │   │   └── profile        # Cấu hình bộ gõ tiếng Việt Fcitx5 Lotus
+│   ├── foot/
+│   │   └── foot.ini       # Cấu hình terminal Foot (font size 12, padding)
 │   ├── hypr/
 │   │   ├── autostart.lua  # Tự động mở các ứng dụng khi đăng nhập
 │   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
@@ -61,6 +63,7 @@ omarchy-setup/
 ./setup.sh browser      # Đặt Microsoft Edge đã cài làm trình duyệt mặc định (Omarchy, liên kết web, HTML)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
+./setup.sh terminal     # Cấu hình font chữ terminal (JetBrainsMono Nerd Font size 12)
 ./setup.sh agent_quota  # Hiển thị quota thật Gemini và Claude/GPT trên widget Agents
 ./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
 ./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)
