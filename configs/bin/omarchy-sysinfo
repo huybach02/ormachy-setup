@@ -74,8 +74,8 @@ get_ram() {
     local ram_pct=$((used_mem * 100 / total_mem))
     local ram_used_gb
     local ram_total_gb
-    ram_used_gb=$(awk "BEGIN {printf \"%.1f\", $used_mem / 1048576}")
-    ram_total_gb=$(awk "BEGIN {printf \"%.1f\", $total_mem / 1048576}")
+    ram_used_gb=$(awk "BEGIN {printf \"%.1fG\", $used_mem / 1048576}")
+    ram_total_gb=$(awk "BEGIN {val = ($total_mem / 1048576); int_val = int(val + 0.5); printf \"%dG\", int_val}")
 
     local klass="normal"
     if [ "$ram_pct" -ge 85 ]; then
@@ -89,20 +89,16 @@ get_ram() {
 # 3. Disk
 # ------------------------------------------------------------------------------
 get_disk() {
-    local _ d_total_k d_used_k d_avail_k d_pct _
-    read -r _ d_total_k d_used_k d_avail_k d_pct _ < <(df -k / | tail -n 1)
-    local disk_used_gb
-    local disk_total_gb
-    disk_used_gb=$(awk "BEGIN {printf \"%.1f\", $d_used_k / 1048576}")
-    disk_total_gb=$(awk "BEGIN {printf \"%.1f\", $d_total_k / 1048576}")
-    local disk_num_pct="${d_pct%\%}"
+    local fs size used avail pct mnt
+    read -r fs size used avail pct mnt < <(df -h / | tail -n 1)
+    local disk_num_pct="${pct%\%}"
 
     local klass="normal"
     if [ "$disk_num_pct" -ge 90 ]; then
         klass="active"
     fi
 
-    echo "$d_pct|$klass|$disk_used_gb|$disk_total_gb"
+    echo "$pct|$klass|$used|$size"
 }
 
 # ------------------------------------------------------------------------------
@@ -160,8 +156,8 @@ case "$MODE" in
     ram)
         IFS='|' read -r r_pct r_klass r_used r_total < <(get_ram)
         jq -nc \
-            --arg text "Ram: ${r_pct}%" \
-            --arg tooltip "RAM: ${r_used}G / ${r_total}G (${r_pct}%)" \
+            --arg text "Ram: ${r_pct}% (${r_used}/${r_total})" \
+            --arg tooltip "RAM: ${r_used} / ${r_total} (${r_pct}%)" \
             --arg class "$r_klass" \
             '{"text": $text, "tooltip": $tooltip, "class": $class}'
         ;;
@@ -169,8 +165,8 @@ case "$MODE" in
     disk)
         IFS='|' read -r d_pct d_klass d_used d_total < <(get_disk)
         jq -nc \
-            --arg text "Disk: ${d_pct}" \
-            --arg tooltip "Disk (/): ${d_used}G / ${d_total}G (${d_pct})" \
+            --arg text "Disk: ${d_pct} (${d_used}/${d_total})" \
+            --arg tooltip "Disk (/): ${d_used} / ${d_total} (${d_pct})" \
             --arg class "$d_klass" \
             '{"text": $text, "tooltip": $tooltip, "class": $class}'
         ;;
@@ -199,8 +195,8 @@ case "$MODE" in
             overall_class="active"
         fi
 
-        text="CPU: ${c_pct}%  Ram: ${r_pct}%  Disk: ${d_pct}  GPU: ${g_pct}"
-        tooltip="CPU: ${c_pct}% (${c_model})\nRAM: ${r_used}G / ${r_total}G (${r_pct}%)\nDisk (/): ${d_used}G / ${d_total}G (${d_pct})\nGPU: ${g_pct} (${g_name}, ${g_temp}, VRAM: ${g_vram})"
+        text="CPU: ${c_pct}%  Ram: ${r_pct}% (${r_used}/${r_total})  Disk: ${d_pct} (${d_used}/${d_total})  GPU: ${g_pct}"
+        tooltip="CPU: ${c_pct}% (${c_model})\nRAM: ${r_used} / ${r_total} (${r_pct}%)\nDisk (/): ${d_used} / ${d_total} (${d_pct})\nGPU: ${g_pct} (${g_name}, ${g_temp}, VRAM: ${g_vram})"
 
         jq -nc \
             --arg text "$text" \

@@ -22,6 +22,16 @@
           "id": "omarchy.indicators"
         },
         {
+          "id": "omarchy.clock",
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "id": "omarchy.spacer",
+          "size": 32
+        },
+        {
           "id": "sys-cpu",
           "type": "command",
           "exec": "/home/huybach02/.local/bin/omarchy-sysinfo cpu",
@@ -52,12 +62,6 @@
           "interval": 2,
           "horizontalMargin": 4,
           "onClick": "omarchy-launch-or-focus-tui btop"
-        },
-        {
-          "id": "omarchy.clock",
-          "format": "dddd HH:mm",
-          "formatAlt": "d MMMM 'W'ww yyyy",
-          "verticalFormat": "HH\n—\nmm"
         },
         {
           "id": "omarchy.keyboard-layout"
