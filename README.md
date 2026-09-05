@@ -9,7 +9,8 @@ omarchy-setup/
 ├── configs/               # Lưu trữ các file cấu hình mẫu
 │   ├── bin/
 │   │   ├── omarchy-agent-usage-antigravity # Script thu thập quota/token Antigravity
-│   │   └── omarchy-agent-usage-update      # Wrapper cập nhật usage và trích xuất email
+│   │   ├── omarchy-agent-usage-update      # Wrapper cập nhật usage và trích xuất email
+│   │   └── omarchy-sysinfo                 # Thu thập thông số CPU, RAM, Disk, GPU cho bar
 │   ├── hypr/
 │   │   ├── autostart.lua  # Tự động mở các ứng dụng khi đăng nhập
 │   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V)
@@ -21,6 +22,7 @@ omarchy-setup/
 │   │   │   └── antigravity.json # Cấu hình ngưỡng quota Gemini & Claude
 │   │   ├── plugins/
 │   │   │   └── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
+│   │   ├── shell.json           # Cấu hình thanh bar, layout widget và idle
 │   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
 │   └── systemd/
 │       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
@@ -46,6 +48,7 @@ omarchy-setup/
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
 ./setup.sh agent_quota  # Tích hợp hiển thị quota Antigravity trên widget Agents
+./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
 ```
 
 ## Lưu ý an toàn

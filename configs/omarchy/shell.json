@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "idle": {
+    "screensaver": 150,
+    "lock": 300
+  },
+  "bar": {
+    "position": "top",
+    "transparent": false,
+    "centerAnchor": "omarchy.clock",
+    "layout": {
+      "left": [
+        {
+          "id": "omarchy.menu"
+        },
+        {
+          "id": "huybach02.workspaces"
+        }
+      ],
+      "center": [
+        {
+          "id": "omarchy.indicators"
+        },
+        {
+          "id": "sys-cpu",
+          "type": "command",
+          "exec": "/home/huybach02/.local/bin/omarchy-sysinfo cpu",
+          "interval": 2,
+          "horizontalMargin": 4,
+          "onClick": "omarchy-launch-or-focus-tui btop"
+        },
+        {
+          "id": "sys-ram",
+          "type": "command",
+          "exec": "/home/huybach02/.local/bin/omarchy-sysinfo ram",
+          "interval": 2,
+          "horizontalMargin": 4,
+          "onClick": "omarchy-launch-or-focus-tui btop"
+        },
+        {
+          "id": "sys-disk",
+          "type": "command",
+          "exec": "/home/huybach02/.local/bin/omarchy-sysinfo disk",
+          "interval": 10,
+          "horizontalMargin": 4,
+          "onClick": "omarchy-launch-or-focus-tui btop"
+        },
+        {
+          "id": "sys-gpu",
+          "type": "command",
+          "exec": "/home/huybach02/.local/bin/omarchy-sysinfo gpu",
+          "interval": 2,
+          "horizontalMargin": 4,
+          "onClick": "omarchy-launch-or-focus-tui btop"
+        },
+        {
+          "id": "omarchy.clock",
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "id": "omarchy.weather"
+        },
+        {
+          "id": "omarchy.system-update"
+        }
+      ],
+      "right": [
+        {
+          "id": "omarchy.tray"
+        },
+        {
+          "id": "huybach02.agents"
+        },
+        {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "omarchy.network"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "omarchy.monitor"
+        },
+        {
+          "id": "omarchy.power"
+        }
+      ]
+    }
+  },
+  "plugins": []
+}

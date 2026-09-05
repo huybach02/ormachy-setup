@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Omarchy System Stats Collector for Bar Widget
+# ==============================================================================
+set -euo pipefail
+
+MODE="${1:-all}"
+SHM_DIR="/dev/shm/omarchy-sysinfo"
+mkdir -p "$SHM_DIR"
+
+# ------------------------------------------------------------------------------
+# 1. CPU
+# ------------------------------------------------------------------------------
+get_cpu() {
+    local state_file="${SHM_DIR}/cpu_stat"
+    read -r _ u n s i io irq sirq steal guest g_nice < /proc/stat
+    local total=$((u + n + s + i + io + irq + sirq + steal))
+    local idle=$((i + io))
+    local cpu_pct=0
+
+    if [ -f "$state_file" ]; then
+        read -r prev_total prev_idle < "$state_file"
+        local diff_total=$((total - prev_total))
+        local diff_idle=$((idle - prev_idle))
+        if [ "$diff_total" -gt 0 ]; then
+            cpu_pct=$(( (diff_total - diff_idle) * 100 / diff_total ))
+        fi
+    else
+        # Sample briefly on initial run
+        sleep 0.1
+        read -r _ u2 n2 s2 i2 io2 irq2 sirq2 steal2 guest2 g_nice2 < /proc/stat
+        local total2=$((u2 + n2 + s2 + i2 + io2 + irq2 + sirq2 + steal2))
+        local idle2=$((i2 + io2))
+        local diff_total=$((total2 - total))
+        local diff_idle=$((idle2 - idle))
+        if [ "$diff_total" -gt 0 ]; then
+            cpu_pct=$(( (diff_total - diff_idle) * 100 / diff_total ))
+        fi
+        total=$total2
+        idle=$idle2
+    fi
+    echo "$total $idle" > "$state_file"
+
+    # CPU Model (cached)
+    local model_file="${SHM_DIR}/cpu_model"
+    if [ ! -f "$model_file" ]; then
+        lscpu 2>/dev/null | grep "Model name" | head -n 1 | sed 's/Model name:[ \t]*//' > "$model_file" || true
+    fi
+    local cpu_model
+    cpu_model="$(cat "$model_file" 2>/dev/null || echo "CPU")"
+
+    local klass="normal"
+    if [ "$cpu_pct" -ge 85 ]; then
+        klass="active"
+    fi
+
+    echo "$cpu_pct|$klass|$cpu_model"
+}
+
+# ------------------------------------------------------------------------------
+# 2. RAM
+# ------------------------------------------------------------------------------
+get_ram() {
+    local total_mem=0
+    local avail_mem=0
+    while read -r key val _; do
+        case "$key" in
+            MemTotal:) total_mem=$val ;;
+            MemAvailable:) avail_mem=$val ;;
+        esac
+    done < /proc/meminfo
+
+    local used_mem=$((total_mem - avail_mem))
+    local ram_pct=$((used_mem * 100 / total_mem))
+    local ram_used_gb
+    local ram_total_gb
+    ram_used_gb=$(awk "BEGIN {printf \"%.1f\", $used_mem / 1048576}")
+    ram_total_gb=$(awk "BEGIN {printf \"%.1f\", $total_mem / 1048576}")
+
+    local klass="normal"
+    if [ "$ram_pct" -ge 85 ]; then
+        klass="active"
+    fi
+
+    echo "$ram_pct|$klass|$ram_used_gb|$ram_total_gb"
+}
+
+# ------------------------------------------------------------------------------
+# 3. Disk
+# ------------------------------------------------------------------------------
+get_disk() {
+    local _ d_total_k d_used_k d_avail_k d_pct _
+    read -r _ d_total_k d_used_k d_avail_k d_pct _ < <(df -k / | tail -n 1)
+    local disk_used_gb
+    local disk_total_gb
+    disk_used_gb=$(awk "BEGIN {printf \"%.1f\", $d_used_k / 1048576}")
+    disk_total_gb=$(awk "BEGIN {printf \"%.1f\", $d_total_k / 1048576}")
+    local disk_num_pct="${d_pct%\%}"
+
+    local klass="normal"
+    if [ "$disk_num_pct" -ge 90 ]; then
+        klass="active"
+    fi
+
+    echo "$d_pct|$klass|$disk_used_gb|$disk_total_gb"
+}
+
+# ------------------------------------------------------------------------------
+# 4. GPU
+# ------------------------------------------------------------------------------
+get_gpu() {
+    local gpu_pct="N/A"
+    local gpu_temp=""
+    local gpu_vram=""
+    local gpu_name=""
+    local klass="normal"
+
+    if command -v nvidia-smi &>/dev/null; then
+        local gpu_out
+        gpu_out=$(nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,name --format=csv,noheader,nounits 2>/dev/null || true)
+        if [ -n "$gpu_out" ]; then
+            IFS=',' read -r g_util g_temp g_used g_total g_name <<< "$gpu_out"
+            g_util=$(echo "$g_util" | tr -d ' ')
+            g_temp=$(echo "$g_temp" | tr -d ' ')
+            g_used=$(echo "$g_used" | tr -d ' ')
+            g_total=$(echo "$g_total" | tr -d ' ')
+            gpu_name=$(echo "$g_name" | sed -e 's/^[ \t]*//')
+            gpu_pct="${g_util}%"
+            gpu_temp="${g_temp}°C"
+            gpu_vram="${g_used}/${g_total}MiB"
+            if [ "$g_util" -ge 85 ]; then
+                klass="active"
+            fi
+        fi
+    elif [ -f /sys/class/drm/card0/device/gpu_busy_percent ]; then
+        local busy
+        busy=$(cat /sys/class/drm/card0/device/gpu_busy_percent 2>/dev/null || echo "0")
+        gpu_pct="${busy}%"
+        if [ "$busy" -ge 85 ]; then
+            klass="active"
+        fi
+    fi
+
+    echo "$gpu_pct|$klass|$gpu_temp|$gpu_vram|$gpu_name"
+}
+
+# ------------------------------------------------------------------------------
+# Output Dispatcher
+# ------------------------------------------------------------------------------
+case "$MODE" in
+    cpu)
+        IFS='|' read -r c_pct c_klass c_model < <(get_cpu)
+        jq -nc \
+            --arg text "CPU: ${c_pct}%" \
+            --arg tooltip "CPU: ${c_pct}%\nModel: ${c_model}" \
+            --arg class "$c_klass" \
+            '{"text": $text, "tooltip": $tooltip, "class": $class}'
+        ;;
+
+    ram)
+        IFS='|' read -r r_pct r_klass r_used r_total < <(get_ram)
+        jq -nc \
+            --arg text "Ram: ${r_pct}%" \
+            --arg tooltip "RAM: ${r_used}G / ${r_total}G (${r_pct}%)" \
+            --arg class "$r_klass" \
+            '{"text": $text, "tooltip": $tooltip, "class": $class}'
+        ;;
+
+    disk)
+        IFS='|' read -r d_pct d_klass d_used d_total < <(get_disk)
+        jq -nc \
+            --arg text "Disk: ${d_pct}" \
+            --arg tooltip "Disk (/): ${d_used}G / ${d_total}G (${d_pct})" \
+            --arg class "$d_klass" \
+            '{"text": $text, "tooltip": $tooltip, "class": $class}'
+        ;;
+
+    gpu)
+        IFS='|' read -r g_pct g_klass g_temp g_vram g_name < <(get_gpu)
+        tooltip="GPU: ${g_pct}"
+        if [ -n "$g_name" ]; then tooltip="${tooltip} (${g_name})"; fi
+        if [ -n "$g_temp" ]; then tooltip="${tooltip}\nTemperature: ${g_temp}"; fi
+        if [ -n "$g_vram" ]; then tooltip="${tooltip}\nVRAM: ${g_vram}"; fi
+        jq -nc \
+            --arg text "GPU: ${g_pct}" \
+            --arg tooltip "$tooltip" \
+            --arg class "$g_klass" \
+            '{"text": $text, "tooltip": $tooltip, "class": $class}'
+        ;;
+
+    all|*)
+        IFS='|' read -r c_pct c_klass c_model < <(get_cpu)
+        IFS='|' read -r r_pct r_klass r_used r_total < <(get_ram)
+        IFS='|' read -r d_pct d_klass d_used d_total < <(get_disk)
+        IFS='|' read -r g_pct g_klass g_temp g_vram g_name < <(get_gpu)
+
+        overall_class="normal"
+        if [ "$c_klass" = "active" ] || [ "$r_klass" = "active" ] || [ "$d_klass" = "active" ] || [ "$g_klass" = "active" ]; then
+            overall_class="active"
+        fi
+
+        text="CPU: ${c_pct}%  Ram: ${r_pct}%  Disk: ${d_pct}  GPU: ${g_pct}"
+        tooltip="CPU: ${c_pct}% (${c_model})\nRAM: ${r_used}G / ${r_total}G (${r_pct}%)\nDisk (/): ${d_used}G / ${d_total}G (${d_pct})\nGPU: ${g_pct} (${g_name}, ${g_temp}, VRAM: ${g_vram})"
+
+        jq -nc \
+            --arg text "$text" \
+            --arg tooltip "$tooltip" \
+            --arg class "$overall_class" \
+            '{"text": $text, "tooltip": $tooltip, "class": $class}'
+        ;;
+esac

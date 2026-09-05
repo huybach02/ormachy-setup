@@ -363,6 +363,41 @@ setup_agent_quota() {
     fi
 }
 
+# --- Module: System Stats Bar Widgets (CPU, RAM, Disk, GPU) ---
+setup_sysinfo() {
+    log_info "Bắt đầu cấu hình widget hiển thị thông số hệ thống (CPU, RAM, Disk, GPU) trên thanh bar..."
+    
+    local user="${USER:-$(id -un)}"
+    local bin_dir="${HOME}/.local/bin"
+    local omarchy_conf_dir="${HOME}/.config/omarchy"
+    mkdir -p "$bin_dir" "$omarchy_conf_dir"
+    
+    # 1. Cài đặt script omarchy-sysinfo
+    local source_script="${CONFIGS_DIR}/bin/omarchy-sysinfo"
+    local target_script="${bin_dir}/omarchy-sysinfo"
+    if [ -f "$source_script" ]; then
+        cp "$source_script" "$target_script"
+        chmod +x "$target_script"
+        log_success "Đã cập nhật ${target_script}"
+    fi
+
+    # 2. Cập nhật cấu hình shell.json
+    local target_shell="${omarchy_conf_dir}/shell.json"
+    local source_shell="${CONFIGS_DIR}/omarchy/shell.json"
+    if [ -f "$source_shell" ]; then
+        backup_file "$target_shell"
+        sed "s/huybach02/${user}/g" "$source_shell" > "$target_shell"
+        log_success "Đã cập nhật ${target_shell}"
+    fi
+
+    # 3. Khởi động lại omarchy shell nếu đang chạy
+    if pgrep quickshell &>/dev/null && command -v omarchy &>/dev/null; then
+        log_info "Đang khởi động lại omarchy shell để áp dụng widget thông số hệ thống..."
+        omarchy restart shell
+        log_success "Omarchy shell đã khởi động lại thành công!"
+    fi
+}
+
 # --- Placeholder cho các bước setup sắp tới ---
 # setup_vietnamese_input() { ... }
 
@@ -396,6 +431,9 @@ main() {
         agent_quota)
             setup_agent_quota
             ;;
+        sysinfo)
+            setup_sysinfo
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -404,9 +442,10 @@ main() {
             setup_apps
             setup_looknfeel
             setup_agent_quota
+            setup_sysinfo
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo]"
             exit 1
             ;;
     esac
