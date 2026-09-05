@@ -281,14 +281,22 @@ setup_packages() {
             xdg-mime default featherpad.desktop "$mime" 2>/dev/null || true
         done
 
-        # Cấu hình biến môi trường VISUAL / EDITOR trong ~/.bashrc
+        # Cấu hình biến môi trường VISUAL / EDITOR trong ~/.bashrc (đặt trước check interactive)
         if ! grep -q 'VISUAL="featherpad"' "${HOME}/.bashrc"; then
-            cat << 'EOF' >> "${HOME}/.bashrc"
+            if grep -q "fnm env" "${HOME}/.bashrc"; then
+                sed -i '/fnm env/a \
+\
+# Default text editor\
+export VISUAL="featherpad"\
+export EDITOR="featherpad"' "${HOME}/.bashrc"
+            else
+                cat << 'EOF' >> "${HOME}/.bashrc"
 
 # Default text editor
 export VISUAL="featherpad"
-export EDITOR="${EDITOR:-featherpad}"
+export EDITOR="featherpad"
 EOF
+            fi
         fi
 
         log_success "Đã thiết lập FeatherPad làm trình soạn thảo mặc định (Omarchy defaults, XDG MIME, VISUAL/EDITOR)!"
