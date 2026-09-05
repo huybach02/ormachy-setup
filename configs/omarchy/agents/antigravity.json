@@ -1,0 +1,6 @@
+{
+  "gemini_limit": 100,
+  "claude_limit": 50,
+  "window_hours": 5,
+  "tier_label": "DeepMind"
+}

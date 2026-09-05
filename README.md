@@ -16,7 +16,9 @@ omarchy-setup/
 │   │   ├── monitors.lua   # 2 màn hình (Philip Trái/Primary, AOC Phải/Secondary)
 │   │   └── windows.lua    # Window rules gán cửa sổ ứng dụng vào workspace
 │   ├── omarchy/
-│   │   └── Workspaces.qml # Tên hiển thị các workspace trên thanh bar
+│   │   ├── agents/
+│   │   │   └── antigravity.json # Cấu hình ngưỡng quota Gemini & Claude
+│   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
 │   └── systemd/
 │       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
 │       └── omarchy-agent-antigravity.timer   # Timer chạy mỗi 2 phút

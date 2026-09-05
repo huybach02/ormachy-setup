@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Collect Antigravity usage into one display-ready JSON record for Omarchy.
+"""
+Collect Antigravity usage and quota into one display-ready JSON record for Omarchy.
+
+Supports dual model quotas for Antigravity:
+  1. Gemini (Flash / Pro)
+  2. Claude (Sonnet / Opus)
 
 Watches ~/.gemini/antigravity-cli history, conversations, and quota status.
-Writes directly to ~/.local/state/omarchy/agents/usage/antigravity.json.
+Configurable via ~/.config/omarchy/agents/antigravity.json.
+Writes to ~/.local/state/omarchy/agents/usage/antigravity.json.
 """
 
-import json
 import os
-import sqlite3
 import sys
+import json
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,146 +24,242 @@ HISTORY_FILE = GEMINI_DIR / "history.jsonl"
 DB_FILE = GEMINI_DIR / "conversation_summaries.db"
 LOG_DIR = GEMINI_DIR / "log"
 
-USAGE_DIR = (
-    Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state"))
-    / "omarchy"
-    / "agents"
-    / "usage"
-)
+CONFIG_DIR = HOME / ".config" / "omarchy" / "agents"
+CONFIG_FILE = CONFIG_DIR / "antigravity.json"
+
+USAGE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state")) / "omarchy" / "agents" / "usage"
 USAGE_FILE = USAGE_DIR / "antigravity.json"
 
+# Default quota configuration for Antigravity
+DEFAULT_CONFIG = {
+    "gemini_limit": 100,      # Max prompts per 5h window
+    "claude_limit": 50,       # Max prompts per 5h window
+    "window_hours": 5,        # Rolling window in hours
+    "tier_label": "DeepMind"
+}
+
+def load_config():
+    config = dict(DEFAULT_CONFIG)
+    if CONFIG_FILE.is_file():
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                user_conf = json.load(f)
+                if isinstance(user_conf, dict):
+                    config.update(user_conf)
+        except Exception:
+            pass
+    else:
+        # Create default config file if it doesn't exist
+        try:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+        except Exception:
+            pass
+    return config
 
 def get_user_email():
-  if LOG_DIR.is_dir():
-    try:
-      logs = sorted(LOG_DIR.glob("*.log"), key=os.path.getmtime, reverse=True)
-      for log in logs[:3]:
-        with open(log, "r", encoding="utf-8", errors="ignore") as f:
-          for line in f:
-            if "applyAuthResult:" in line and "email=" in line:
-              parts = line.split("email=")
-              if len(parts) > 1:
-                return parts[1].split(",")[0].strip()
-    except Exception:
-      pass
-  return "davidbach795@gmail.com"
-
+    if LOG_DIR.is_dir():
+        try:
+            logs = sorted(LOG_DIR.glob("*.log"), key=os.path.getmtime, reverse=True)
+            for log in logs[:3]:
+                with open(log, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        if "applyAuthResult:" in line and "email=" in line:
+                            parts = line.split("email=")
+                            if len(parts) > 1:
+                                return parts[1].split(",")[0].strip()
+        except Exception:
+            pass
+    return "davidbach795@gmail.com"
 
 def main():
-  now = datetime.now()
-  today_str = now.strftime("%Y-%m-%d")
-  recent_dates = [
-      (now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)
-  ]
-  recent_days = {d: 0 for d in recent_dates}
-  active_dates = set()
-  total_prompts = 0
-  today_prompts = 0
-  unique_sessions = set()
-  today_sessions = set()
+    config = load_config()
+    gemini_limit = max(1, int(config.get("gemini_limit", 100)))
+    claude_limit = max(1, int(config.get("claude_limit", 50)))
+    window_hours = max(1, int(config.get("window_hours", 5)))
+    tier_label = str(config.get("tier_label", "DeepMind"))
 
-  if HISTORY_FILE.is_file():
-    with open(HISTORY_FILE, "r", encoding="utf-8", errors="ignore") as f:
-      for line in f:
-        if not line.strip():
-          continue
+    now_utc = datetime.now(timezone.utc)
+    now_local = datetime.now()
+    today_str = now_local.strftime("%Y-%m-%d")
+    recent_dates = [(now_local - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+    recent_days = {d: 0 for d in recent_dates}
+    active_dates = set()
+
+    total_prompts = 0
+    today_prompts = 0
+    unique_sessions = set()
+    today_sessions = set()
+
+    gemini_prompts_today = 0
+    claude_prompts_today = 0
+
+    gemini_window_timestamps = []
+    claude_window_timestamps = []
+
+    window_cutoff_utc = now_utc - timedelta(hours=window_hours)
+
+    # Track current active model per conversation (default to gemini)
+    conv_model = {}
+
+    if HISTORY_FILE.is_file():
+        with open(HISTORY_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    ts_ms = data.get("timestamp")
+                    conv_id = data.get("conversationId", "")
+                    entry_type = data.get("type", "")
+                    display_text = str(data.get("display", ""))
+
+                    # Detect /model changes
+                    if entry_type == "slash_command" and "/model" in display_text:
+                        if "claude" in display_text.lower():
+                            conv_model[conv_id] = "claude"
+                        elif "gemini" in display_text.lower():
+                            conv_model[conv_id] = "gemini"
+
+                    if ts_ms:
+                        dt_utc = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+                        dt_local = dt_utc.astimezone()
+                        d_str = dt_local.strftime("%Y-%m-%d")
+                        active_dates.add(d_str)
+
+                        if d_str in recent_days:
+                            recent_days[d_str] += 1
+                        
+                        is_today = (d_str == today_str)
+                        if is_today:
+                            today_prompts += 1
+                            if conv_id:
+                                today_sessions.add(conv_id)
+
+                        model_type = conv_model.get(conv_id, "gemini")
+                        if "claude" in display_text.lower() and ("claude" in model_type or entry_type != "slash_command" and "claude-sonnet" in display_text):
+                            model_type = "claude"
+
+                        if is_today:
+                            if model_type == "claude":
+                                claude_prompts_today += 1
+                            else:
+                                gemini_prompts_today += 1
+
+                        # Track rolling window
+                        if dt_utc >= window_cutoff_utc:
+                            if model_type == "claude":
+                                claude_window_timestamps.append(dt_utc)
+                            else:
+                                gemini_window_timestamps.append(dt_utc)
+
+                    if conv_id:
+                        unique_sessions.add(conv_id)
+                    total_prompts += 1
+                except Exception:
+                    continue
+
+    # Query step count for token estimation
+    total_steps = 0
+    if DB_FILE.is_file():
         try:
-          data = json.loads(line)
-          ts_ms = data.get("timestamp")
-          conv_id = data.get("conversationId", "")
-          if ts_ms:
-            dt = datetime.fromtimestamp(ts_ms / 1000)
-            d_str = dt.strftime("%Y-%m-%d")
-            active_dates.add(d_str)
-            if d_str in recent_days:
-              recent_days[d_str] += 1
-            if d_str == today_str:
-              today_prompts += 1
-              if conv_id:
-                today_sessions.add(conv_id)
-          if conv_id:
-            unique_sessions.add(conv_id)
-          total_prompts += 1
+            conn = sqlite3.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("SELECT sum(step_count) FROM conversation_summaries;")
+            row = cur.fetchone()
+            if row and row[0]:
+                total_steps = row[0]
+            conn.close()
         except Exception:
-          continue
+            pass
 
-  total_steps = 0
-  if DB_FILE.is_file():
-    try:
-      conn = sqlite3.connect(DB_FILE)
-      cur = conn.cursor()
-      cur.execute("SELECT sum(step_count) FROM conversation_summaries;")
-      row = cur.fetchone()
-      if row and row[0]:
-        total_steps = row[0]
-      conn.close()
-    except Exception:
-      pass
+    gemini_today_tokens = gemini_prompts_today * 3500
+    claude_today_tokens = claude_prompts_today * 3500
+    today_total_tokens = gemini_today_tokens + claude_today_tokens
 
-  today_tokens = today_prompts * 3500
-  total_tokens = max(total_prompts * 3500, total_steps * 2000)
-  model_name = "Gemini 3.8 Flash (High)"
-  user_email = get_user_email()
+    gemini_total_tokens = max(gemini_prompts_today * 3500, total_steps * 2000)
+    claude_total_tokens = claude_prompts_today * 3500
 
-  record = {
-      "schemaVersion": 1,
-      "id": "antigravity",
-      "name": "Antigravity",
-      "updatedAt": datetime.now(timezone.utc).isoformat(),
-      "ready": True,
-      "hasLocalStats": True,
-      "todayPrompts": today_prompts,
-      "todaySessions": max(1, len(today_sessions)),
-      "todayTotalTokens": today_tokens,
-      "todayTokensByModel": {model_name: today_tokens},
-      "recentDays": [
-          {"date": d, "messageCount": recent_days[d]} for d in recent_dates
-      ],
-      "totalPrompts": total_prompts,
-      "totalSessions": max(1, len(unique_sessions)),
-      "activeDays": len(active_dates),
-      "activeDates": sorted(list(active_dates)),
-      "modelUsage": {
-          model_name: {
-              "inputTokens": int(total_tokens * 0.8),
-              "outputTokens": int(total_tokens * 0.2),
-              "totalTokens": total_tokens,
-          }
-      },
-      "limits": [
-          {
-              "label": "Session (5-hour)",
-              "percent": min(1.0, round(today_prompts / 100.0, 2)),
-              "resetsAt": (
-                  datetime.now(timezone.utc) + timedelta(hours=4)
-              ).strftime("%Y-%m-%dT%H:00:00Z"),
-          },
-          {
-              "label": "Weekly (7-day)",
-              "percent": min(1.0, round(total_prompts / 1000.0, 2)),
-              "resetsAt": (
-                  datetime.now(timezone.utc) + timedelta(days=6)
-              ).strftime("%Y-%m-%dT%H:00:00Z"),
-          },
-      ],
-      "tierLabel": "DeepMind",
-      "usageStatusText": "",
-      "authHelpText": f"Logged in as {user_email}",
-  }
+    user_email = get_user_email()
 
-  output_json = json.dumps(record, separators=(",", ":"))
+    # Calculate utilization % and reset timers
+    gemini_window_count = len(gemini_window_timestamps)
+    gemini_percent = min(1.0, round(gemini_window_count / gemini_limit, 2))
+    if gemini_window_timestamps:
+        gemini_resets_at = (min(gemini_window_timestamps) + timedelta(hours=window_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        gemini_resets_at = ""
 
-  # Write to file atomically
-  USAGE_DIR.mkdir(parents=True, exist_ok=True)
-  tmp_file = USAGE_DIR / f".antigravity.{os.getpid()}.tmp"
-  with open(tmp_file, "w", encoding="utf-8") as f:
-    f.write(output_json + "\n")
-  tmp_file.replace(USAGE_FILE)
+    claude_window_count = len(claude_window_timestamps)
+    claude_percent = min(1.0, round(claude_window_count / claude_limit, 2))
+    if claude_window_timestamps:
+        claude_resets_at = (min(claude_window_timestamps) + timedelta(hours=window_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        claude_resets_at = ""
 
-  # Also output to stdout if called directly
-  if sys.stdout.isatty():
-    print(json.dumps(record, indent=2))
+    limits = [
+        {
+            "label": "Gemini (Flash / Pro)",
+            "title": "Gemini (Flash / Pro)",
+            "percent": gemini_percent,
+            "resetsAt": gemini_resets_at
+        },
+        {
+            "label": "Claude (Sonnet / Opus)",
+            "title": "Claude (Sonnet / Opus)",
+            "percent": claude_percent,
+            "resetsAt": claude_resets_at
+        }
+    ]
 
+    record = {
+        "schemaVersion": 1,
+        "id": "antigravity",
+        "name": "Antigravity",
+        "updatedAt": now_utc.isoformat(),
+        "ready": True,
+        "hasLocalStats": True,
+        "todayPrompts": today_prompts,
+        "todaySessions": max(1, len(today_sessions)),
+        "todayTotalTokens": today_total_tokens,
+        "todayTokensByModel": {
+            "Gemini 3.8 Flash (High)": gemini_today_tokens,
+            "Claude Sonnet 4.6 (Thinking)": claude_today_tokens
+        },
+        "recentDays": [{"date": d, "messageCount": recent_days[d]} for d in recent_dates],
+        "totalPrompts": total_prompts,
+        "totalSessions": max(1, len(unique_sessions)),
+        "activeDays": len(active_dates),
+        "activeDates": sorted(list(active_dates)),
+        "modelUsage": {
+            "Gemini 3.8 Flash (High)": {
+                "inputTokens": int(gemini_total_tokens * 0.8),
+                "outputTokens": int(gemini_total_tokens * 0.2),
+                "totalTokens": gemini_total_tokens
+            },
+            "Claude Sonnet 4.6 (Thinking)": {
+                "inputTokens": int(claude_total_tokens * 0.8),
+                "outputTokens": int(claude_total_tokens * 0.2),
+                "totalTokens": claude_total_tokens
+            }
+        },
+        "limits": limits,
+        "tierLabel": tier_label,
+        "usageStatusText": "",
+        "authHelpText": f"Logged in as {user_email}"
+    }
+
+    output_json = json.dumps(record, separators=(",", ":"))
+
+    USAGE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_file = USAGE_DIR / f".antigravity.{os.getpid()}.tmp"
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        f.write(output_json + "\n")
+    tmp_file.replace(USAGE_FILE)
+
+    if sys.stdout.isatty():
+        print(json.dumps(record, indent=2))
 
 if __name__ == "__main__":
-  main()
+    main()

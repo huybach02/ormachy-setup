@@ -301,7 +301,17 @@ setup_agent_quota() {
         log_success "Đã cập nhật ${target_collector}"
     fi
     
-    # 2. Cài đặt systemd user service và timer
+    # 2. Cài đặt file cấu hình ngưỡng quota (nếu chưa có)
+    local config_dir="${HOME}/.config/omarchy/agents"
+    local target_conf="${config_dir}/antigravity.json"
+    local source_conf="${CONFIGS_DIR}/omarchy/agents/antigravity.json"
+    mkdir -p "$config_dir"
+    if [ ! -f "$target_conf" ] && [ -f "$source_conf" ]; then
+        cp "$source_conf" "$target_conf"
+        log_success "Đã tạo cấu hình quota tại ${target_conf}"
+    fi
+
+    # 3. Cài đặt systemd user service và timer
     local target_service="${systemd_dir}/omarchy-agent-antigravity.service"
     local source_service="${CONFIGS_DIR}/systemd/omarchy-agent-antigravity.service"
     local target_timer="${systemd_dir}/omarchy-agent-antigravity.timer"
@@ -316,7 +326,7 @@ setup_agent_quota() {
         log_success "Đã kích hoạt systemd timer cập nhật quota tự động!"
     fi
     
-    # 3. Chạy cập nhật ngay lần đầu
+    # 4. Chạy cập nhật ngay lần đầu
     if [ -x "$target_collector" ]; then
         log_info "Đang thu thập dữ liệu quota Antigravity..."
         "$target_collector"
