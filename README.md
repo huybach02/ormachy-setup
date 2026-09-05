@@ -28,6 +28,7 @@ omarchy-setup/
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V)
 ./setup.sh packages     # Tự động cài đặt phần mềm (VSCode, Edge, Helium, AppImageLauncher)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
+./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
 
 ```
 

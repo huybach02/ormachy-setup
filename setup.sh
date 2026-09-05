@@ -251,9 +251,41 @@ setup_apps() {
     fi
 }
 
+# --- Module: Look and Feel (Gaps, Borders, etc.) ---
+setup_looknfeel() {
+    log_info "Bắt đầu cấu hình giao diện & khoảng cách cửa sổ (Gaps = 0)..."
+    
+    local hypr_dir="${HOME}/.config/hypr"
+    local target_looknfeel="${hypr_dir}/looknfeel.lua"
+    local source_looknfeel="${CONFIGS_DIR}/hypr/looknfeel.lua"
+    
+    if [ ! -f "$source_looknfeel" ]; then
+        log_error "Không tìm thấy file nguồn: ${source_looknfeel}"
+        return 1
+    fi
+    
+    mkdir -p "$hypr_dir"
+    backup_file "$target_looknfeel"
+    
+    cp "$source_looknfeel" "$target_looknfeel"
+    log_success "Đã cập nhật ${target_looknfeel}"
+    
+    # Reload Hyprland nếu đang chạy
+    if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
+        log_info "Đang reload cấu hình Hyprland..."
+        hyprctl reload
+        local errors
+        errors="$(hyprctl configerrors 2>&1 || true)"
+        if [ -n "$errors" ] && [ "$errors" != "ok" ]; then
+            log_warn "Hyprland cảnh báo lỗi cấu hình:\n${errors}"
+        else
+            log_success "Hyprland đã reload thành công mà không có lỗi!"
+        fi
+    fi
+}
+
 # --- Placeholder cho các bước setup sắp tới ---
 # setup_vietnamese_input() { ... }
-# setup_looknfeel() { ... }
 
 # --- Main Dispatcher ---
 main() {
@@ -279,15 +311,19 @@ main() {
         apps)
             setup_apps
             ;;
+        looknfeel)
+            setup_looknfeel
+            ;;
         all)
             setup_monitors
             setup_workspaces
             setup_keybindings
             setup_packages
             setup_apps
+            setup_looknfeel
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel]"
             exit 1
             ;;
     esac
