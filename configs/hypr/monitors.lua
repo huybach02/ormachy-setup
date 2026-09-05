@@ -18,3 +18,7 @@ hl.monitor({ output = "", mode = "preferred", position = "auto", scale = omarchy
 -- Workspace bindings: Workspaces on Primary (Philip) and Secondary (AOC)
 hl.workspace_rule({ workspace = "1", monitor = "HDMI-A-2", default = true })
 hl.workspace_rule({ workspace = "2", monitor = "DP-2", default = true })
+hl.workspace_rule({ workspace = "3", monitor = "HDMI-A-2" })
+hl.workspace_rule({ workspace = "4", monitor = "DP-2" })
+hl.workspace_rule({ workspace = "5", monitor = "HDMI-A-2" })
+hl.workspace_rule({ workspace = "6", monitor = "DP-2" })

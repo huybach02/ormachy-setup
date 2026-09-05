@@ -41,9 +41,9 @@ backup_file() {
     fi
 }
 
-# --- Module: Monitor Setup ---
+# --- Module: Monitor & Workspace Monitor Rules ---
 setup_monitors() {
-    log_info "Bắt đầu cấu hình màn hình (Philip: Trái/Primary, AOC: Phải/Secondary)..."
+    log_info "Bắt đầu cấu hình màn hình và gán workspace (Philip: Trái/Primary, AOC: Phải/Secondary)..."
     
     local target_dir="${HOME}/.config/hypr"
     local target_file="${target_dir}/monitors.lua"
@@ -74,6 +74,39 @@ setup_monitors() {
     fi
 }
 
+# --- Module: Workspace Names on Bar Widget ---
+setup_workspaces() {
+    log_info "Bắt đầu cấu hình tên hiển thị cho các Workspace trên thanh bar..."
+    local user="${USER:-$(id -un)}"
+    local plugin_dir="${HOME}/.config/omarchy/plugins/${user}.workspaces"
+    local source_qml="${CONFIGS_DIR}/omarchy/Workspaces.qml"
+    
+    if [ ! -f "$source_qml" ]; then
+        log_error "Không tìm thấy file nguồn: ${source_qml}"
+        return 1
+    fi
+    
+    # Clone plugin nếu chưa tồn tại
+    if [ ! -d "$plugin_dir" ]; then
+        log_info "Đang clone omarchy.workspaces sang ${user}.workspaces..."
+        omarchy plugin clone omarchy.workspaces
+    fi
+    
+    # Cập nhật Workspaces.qml với tên người dùng tương ứng
+    local target_qml="${plugin_dir}/Workspaces.qml"
+    backup_file "$target_qml"
+    
+    sed "s/huybach02\.workspaces/${user}\.workspaces/g" "$source_qml" > "$target_qml"
+    log_success "Đã cập nhật ${target_qml}"
+    
+    # Khởi động lại omarchy shell nếu đang chạy
+    if pgrep quickshell &>/dev/null && command -v omarchy &>/dev/null; then
+        log_info "Đang khởi động lại omarchy shell để áp dụng tên workspace..."
+        omarchy restart shell
+        log_success "Omarchy shell đã khởi động lại thành công!"
+    fi
+}
+
 # --- Placeholder cho các bước setup sắp tới ---
 # setup_vietnamese_input() { ... }
 # setup_keybindings() { ... }
@@ -92,12 +125,16 @@ main() {
         monitors)
             setup_monitors
             ;;
+        workspaces)
+            setup_workspaces
+            ;;
         all)
             setup_monitors
+            setup_workspaces
             # Các module tiếp theo sẽ được gọi ở đây
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces]"
             exit 1
             ;;
     esac
