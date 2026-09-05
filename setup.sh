@@ -511,6 +511,110 @@ setup_vietnamese_input() {
     fi
 }
 
+# --- Module: PHP Development Environment & Version Switcher ---
+setup_php() {
+    log_info "Bắt đầu cài đặt môi trường PHP (8.5 mặc định, 8.3 legacy) và công cụ php-switch..."
+
+    local pkgs_to_install=()
+    local php_packages=(
+        # PHP 8.5 (Default)
+        "php"
+        "php-fpm"
+        "php-gd"
+        "php-sqlite"
+        "php-pgsql"
+        "php-redis"
+        "php-imagick"
+        "composer"
+
+        # PHP 8.3 (Legacy / Alternative)
+        "php-legacy"
+        "php-legacy-fpm"
+        "php-legacy-gd"
+        "php-legacy-sqlite"
+        "php-legacy-pgsql"
+        "php-legacy-redis"
+        "php-legacy-imagick"
+    )
+
+    for pkg in "${php_packages[@]}"; do
+        if pacman -Q "$pkg" &>/dev/null; then
+            log_info "Gói ${pkg} đã được cài đặt."
+        else
+            log_warn "Gói ${pkg} chưa được cài đặt."
+            pkgs_to_install+=("$pkg")
+        fi
+    done
+
+    if [ ${#pkgs_to_install[@]} -gt 0 ]; then
+        log_info "Tiến hành cài đặt các gói PHP còn thiếu: ${pkgs_to_install[*]}..."
+        if command -v yay &>/dev/null; then
+            yay -S --needed --noconfirm "${pkgs_to_install[@]}"
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --needed --noconfirm "${pkgs_to_install[@]}"
+        fi
+    fi
+
+    # Cấu hình extensions cho PHP 8.5
+    local exts=(bcmath curl gd intl mysqli pdo_mysql pdo_pgsql pdo_sqlite pgsql soap sqlite3 zip)
+    if [ -f "/etc/php/php.ini" ]; then
+        local need_update_85=0
+        for ext in "${exts[@]}"; do
+            if ! grep -q "^extension=${ext}$" /etc/php/php.ini; then
+                need_update_85=1
+                break
+            fi
+        done
+        if [ "$need_update_85" -eq 1 ]; then
+            log_info "Đang kích hoạt extensions cho PHP 8.5 trong /etc/php/php.ini..."
+            for ext in "${exts[@]}"; do
+                sudo sed -i -E "s/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*${ext}$/extension=${ext}/g" /etc/php/php.ini
+            done
+        fi
+    fi
+
+    # Cấu hình extensions cho PHP 8.3 (php-legacy)
+    if [ -f "/etc/php-legacy/php.ini" ]; then
+        local need_update_83=0
+        for ext in "${exts[@]}"; do
+            if ! grep -q "^extension=${ext}$" /etc/php-legacy/php.ini; then
+                need_update_83=1
+                break
+            fi
+        done
+        if ! grep -q "^zend_extension=opcache" /etc/php-legacy/php.ini; then
+            need_update_83=1
+        fi
+        if [ "$need_update_83" -eq 1 ]; then
+            log_info "Đang kích hoạt extensions cho PHP 8.3 trong /etc/php-legacy/php.ini..."
+            for ext in "${exts[@]}"; do
+                sudo sed -i -E "s/^;[[:space:]]*extension[[:space:]]*=[[:space:]]*${ext}$/extension=${ext}/g" /etc/php-legacy/php.ini
+            done
+            sudo sed -i -E "s/^;[[:space:]]*zend_extension[[:space:]]*=[[:space:]]*opcache/zend_extension=opcache/g" /etc/php-legacy/php.ini
+        fi
+    fi
+
+    # Cài đặt php-switch và symlink sphp vào ~/.local/bin
+    local bin_dir="${HOME}/.local/bin"
+    mkdir -p "$bin_dir"
+    local source_switch="${CONFIGS_DIR}/bin/php-switch"
+    local target_switch="${bin_dir}/php-switch"
+
+    if [ -f "$source_switch" ]; then
+        backup_file "$target_switch"
+        cp "$source_switch" "$target_switch"
+        chmod +x "$target_switch"
+        ln -sfn php-switch "${bin_dir}/sphp"
+        log_success "Đã cài đặt php-switch và alias sphp tại ${bin_dir}"
+    fi
+
+    # Thiết lập PHP 8.5 làm phiên bản mặc định
+    log_info "Thiết lập PHP 8.5 làm phiên bản mặc định..."
+    "${bin_dir}/php-switch" 8.5
+
+    log_success "Hoàn tất cài đặt môi trường PHP và php-switch!"
+}
+
 # --- Main Dispatcher ---
 main() {
     echo -e "${COLOR_INFO}==========================================${COLOR_RESET}"
@@ -547,6 +651,9 @@ main() {
         vietnamese|input)
             setup_vietnamese_input
             ;;
+        php)
+            setup_php
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -557,9 +664,10 @@ main() {
             setup_agent_quota
             setup_sysinfo
             setup_vietnamese_input
+            setup_php
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|apps|looknfeel|agent_quota|sysinfo|vietnamese|php]"
             exit 1
             ;;
     esac
