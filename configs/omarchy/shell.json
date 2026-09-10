@@ -15,6 +15,10 @@
         },
         {
           "id": "huybach02.workspaces"
+        },
+        {
+          "id": "huybach02.media",
+          "leftMargin": 36
         }
       ],
       "center": [
@@ -23,7 +27,7 @@
         },
         {
           "id": "omarchy.clock",
-          "format": "dddd HH:mm",
+          "format": "ddd d MMM HH:mm",
           "formatAlt": "d MMMM 'W'ww yyyy",
           "verticalFormat": "HH\n—\nmm"
         },
@@ -101,5 +105,11 @@
       ]
     }
   },
-  "plugins": []
+  "plugins": [],
+  "disabledPlugins": [
+    "omarchy.media"
+  ],
+  "cloneSourceRestores": [
+    "huybach02.media"
+  ]
 }

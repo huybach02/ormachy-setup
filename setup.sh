@@ -685,6 +685,51 @@ setup_sysinfo() {
     fi
 }
 
+# --- Module: Sound Wave Visualizer Bar Widget (MPRIS Media) ---
+setup_media() {
+    log_info "Bắt đầu cấu hình widget sóng nhạc động (Sound Wave Visualizer) trên thanh bar..."
+    
+    local user="${USER:-$(id -un)}"
+    local plugin_dir="${HOME}/.config/omarchy/plugins/${user}.media"
+    local source_plugin="${CONFIGS_DIR}/omarchy/plugins/media"
+    
+    # 1. Clone và đồng bộ plugin media tùy biến
+    if [ -d "$source_plugin" ]; then
+        if [ ! -d "$plugin_dir" ]; then
+            log_info "Đang clone omarchy.media sang ${user}.media..."
+            omarchy plugin clone omarchy.media &>/dev/null || true
+        fi
+        mkdir -p "$plugin_dir"
+        local plugin_file
+        for plugin_file in BarWidget.qml manifest.json MediaModel.js Service.qml; do
+            backup_file "${plugin_dir}/${plugin_file}"
+        done
+        cp -r "${source_plugin}/"* "$plugin_dir/"
+        # Đảm bảo manifest và BarWidget có đúng tên user
+        sed -i "s/\"id\": \"huybach02\.media\"/\"id\": \"${user}\.media\"/g" "${plugin_dir}/manifest.json" 2>/dev/null || true
+        sed -i "s/moduleName: \"huybach02\.media\"/moduleName: \"${user}\.media\"/g" "${plugin_dir}/BarWidget.qml" 2>/dev/null || true
+        sed -i "s/\"huybach02\.media\"/\"${user}\.media\"/g" "${plugin_dir}/BarWidget.qml" 2>/dev/null || true
+        log_success "Đã đồng bộ giao diện sóng nhạc cho ${user}.media!"
+    fi
+
+    # 2. Cập nhật cấu hình shell.json
+    local omarchy_conf_dir="${HOME}/.config/omarchy"
+    local target_shell="${omarchy_conf_dir}/shell.json"
+    local source_shell="${CONFIGS_DIR}/omarchy/shell.json"
+    if [ -f "$source_shell" ]; then
+        backup_file "$target_shell"
+        sed "s/huybach02/${user}/g" "$source_shell" > "$target_shell"
+        log_success "Đã cập nhật ${target_shell}"
+    fi
+
+    # 3. Khởi động lại omarchy shell nếu đang chạy
+    if pgrep quickshell &>/dev/null && command -v omarchy &>/dev/null; then
+        log_info "Đang khởi động lại omarchy shell để áp dụng widget sóng nhạc..."
+        omarchy restart shell &>/dev/null || true
+        log_success "Omarchy shell đã khởi động lại thành công!"
+    fi
+}
+
 # --- Module: Vietnamese Input Method (Fcitx5 + Lotus) ---
 setup_vietnamese_input() {
     log_info "Bắt đầu cấu hình bộ gõ tiếng Việt Fcitx5 Lotus và phím tắt Alt + Left Shift..."
@@ -1186,6 +1231,9 @@ main() {
         sysinfo)
             setup_sysinfo
             ;;
+        media|visualizer|soundwave)
+            setup_media
+            ;;
         vietnamese|input)
             setup_vietnamese_input
             ;;
@@ -1215,6 +1263,7 @@ main() {
             setup_branding
             setup_agent_quota
             setup_sysinfo
+            setup_media
             setup_vietnamese_input
             setup_php
             setup_nodejs
@@ -1223,7 +1272,7 @@ main() {
             setup_autocompletion
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|vietnamese|php|node|symfony|automount|autocompletion]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|media|vietnamese|php|node|symfony|automount|autocompletion]"
             exit 1
             ;;
     esac

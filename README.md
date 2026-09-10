@@ -36,6 +36,7 @@ omarchy-setup/
 │   │   │   └── screensaver.txt  # Logo pixel B&T cho Screensaver
 │   │   ├── plugins/
 │   │   │   ├── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
+│   │   │   ├── media/           # Plugin Media sóng nhạc động (20 cột gradient Tokyo Night, bottom aligned)
 │   │   │   └── huybach02.tray/  # Plugin Tray tùy biến (luôn hiện đầy đủ icon, icon rõ nét)
 │   │   ├── mimeapps.list        # Mẫu ứng dụng mặc định (Edge cho web, Sublime Text cho văn bản)
 │   │   ├── shell.json           # Cấu hình thanh bar, layout widget và idle
@@ -73,6 +74,7 @@ omarchy-setup/
 ./setup.sh branding     # Cấu hình logo B&T pixel (màu xanh dương) cho Fastfetch và Screensaver
 ./setup.sh agent_quota  # Hiển thị quota thật Gemini và Claude/GPT trên widget Agents
 ./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
+./setup.sh media        # Cấu hình widget sóng nhạc động (Sound Wave Visualizer) trên bar
 ./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)
 ./setup.sh php          # Cài đặt môi trường PHP (8.5 & 8.3), Composer, extensions & php-switch
 ./setup.sh node         # Cài đặt Node.js, trình quản lý fnm, Corepack (pnpm & yarn)
