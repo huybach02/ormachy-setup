@@ -258,6 +258,22 @@ setup_browser() {
     log_success "Đã đặt Microsoft Edge (${desktop_id}) làm trình duyệt mặc định cho Omarchy, liên kết web và HTML!"
 }
 
+# --- Module: Helium Browser Hardware Acceleration ---
+setup_helium() {
+    log_info "Cấu hình Hardware Video Acceleration cho Helium Browser..."
+
+    local source_flags="${CONFIGS_DIR}/helium/helium-browser-flags.conf"
+    local target_flags="${HOME}/.config/helium-browser-flags.conf"
+
+    if [ -f "$source_flags" ]; then
+        backup_file "$target_flags"
+        cp "$source_flags" "$target_flags"
+        log_success "Đã cập nhật ${target_flags} (kích hoạt giải mã phần cứng VA-API trên NVIDIA/Wayland)!"
+    else
+        log_warn "Không tìm thấy ${source_flags}"
+    fi
+}
+
 # --- Module: Packages & Applications ---
 setup_packages() {
     log_info "Bắt đầu kiểm tra và cài đặt các ứng dụng cần thiết..."
@@ -343,6 +359,7 @@ setup_packages() {
     fi
 
     setup_browser
+    setup_helium
 
     # Cấu hình Sublime Text làm trình soạn thảo văn bản mặc định
     if pacman -Q sublime-text-4 &>/dev/null; then
@@ -1213,6 +1230,9 @@ main() {
         browser)
             setup_browser
             ;;
+        helium|helium-browser)
+            setup_helium
+            ;;
         apps)
             setup_apps
             ;;
@@ -1272,7 +1292,7 @@ main() {
             setup_autocompletion
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|media|vietnamese|php|node|symfony|automount|autocompletion]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|helium|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|media|vietnamese|php|node|symfony|automount|autocompletion]"
             exit 1
             ;;
     esac

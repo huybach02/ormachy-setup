@@ -22,6 +22,8 @@ omarchy-setup/
 │   │   └── profile        # Cấu hình bộ gõ tiếng Việt Fcitx5 Lotus
 │   ├── foot/
 │   │   └── foot.ini       # Cấu hình terminal Foot (font size 12, padding)
+│   ├── helium/
+│   │   └── helium-browser-flags.conf # Cờ tăng tốc phần cứng GPU (VA-API NVIDIA / Wayland)
 │   ├── hypr/
 │   │   ├── autostart.lua  # Tự động mở các ứng dụng khi đăng nhập
 │   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
@@ -68,6 +70,7 @@ omarchy-setup/
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Alt+Space: Tìm kiếm All-in-one, Super+Shift+S, Super+V, Alt+Shift_L)
 ./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, Sublime Text, GitHub CLI, LibreOffice) & đặt Edge/Sublime Text làm mặc định
 ./setup.sh browser      # Đặt Microsoft Edge đã cài làm trình duyệt mặc định (Omarchy, liên kết web, HTML)
+./setup.sh helium       # Cấu hình cờ tăng tốc phần cứng giải mã video (VA-API / NVIDIA) cho Helium Browser
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
 ./setup.sh terminal     # Cấu hình font chữ terminal (JetBrainsMono Nerd Font size 12)

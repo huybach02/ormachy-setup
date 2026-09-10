@@ -42,7 +42,7 @@
           "id": "sys-cpu",
           "type": "command",
           "exec": "/home/huybach02/.local/bin/omarchy-sysinfo cpu",
-          "interval": 2,
+          "interval": 5,
           "horizontalMargin": 4,
           "onClick": "omarchy-launch-or-focus-tui btop"
         },
@@ -50,7 +50,7 @@
           "id": "sys-ram",
           "type": "command",
           "exec": "/home/huybach02/.local/bin/omarchy-sysinfo ram",
-          "interval": 2,
+          "interval": 5,
           "horizontalMargin": 4,
           "onClick": "omarchy-launch-or-focus-tui btop"
         },
@@ -66,7 +66,7 @@
           "id": "sys-gpu",
           "type": "command",
           "exec": "/home/huybach02/.local/bin/omarchy-sysinfo gpu",
-          "interval": 2,
+          "interval": 10,
           "horizontalMargin": 4,
           "onClick": "omarchy-launch-or-focus-tui btop"
         },
