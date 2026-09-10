@@ -14,7 +14,7 @@ omarchy-setup/
 │   │   ├── omarchy-sysinfo                 # Thu thập thông số CPU, RAM, Disk, GPU cho bar
 │   │   └── php-switch                      # Tiện ích chuyển đổi phiên bản PHP linh hoạt (alias: sphp)
 │   ├── blesh/
-│   │   └── init.sh        # Cấu hình autocompletion và phím Tab cho ble.sh
+│   │   └── init.sh        # Cấu hình autocompletion, phím Tab và phím Enter thực thi lệnh cho ble.sh
 │   ├── fastfetch/
 │   │   └── config.jsonc   # Cấu hình Fastfetch (logo pixel xanh dương B&T)
 │   ├── fcitx5/
@@ -160,6 +160,7 @@ Tích hợp **ble.sh (Bash Line Editor)** mang trải nghiệm autocompletion hi
 * **Chữ mờ gợi ý theo thời gian thực (Ghost text)**: Tự động hiển thị phần lệnh tiếp theo từ lịch sử câu lệnh khi bạn đang gõ.
 * **Hoàn thành lệnh bằng phím Tab**: Chỉ cần nhấn phím **Tab** (hoặc `Right Arrow`) khi chữ mờ xuất hiện để điền ngay toàn bộ câu lệnh gợi ý.
 * **Điều hướng Menu Complete**: Nếu không có gợi ý lịch sử, phím **Tab** và **Shift + Tab** sẽ mở menu lựa chọn trực quan và duyệt nhanh qua các danh sách hoàn thành.
+* **Dùng phím Enter thực thi lệnh**: Khi dán nhiều dòng lệnh (multiline paste), phím **Enter** lập tức thực thi lệnh như Bash thông thường, không bị kẹt ở chế độ `-- MULTILINE --`.
 * **Tích hợp fzf**: Hỗ trợ tìm kiếm mờ (fuzzy search) với `Ctrl+R` (lịch sử) và `Ctrl+T` (tìm file).
 
 ## Lưu ý an toàn
