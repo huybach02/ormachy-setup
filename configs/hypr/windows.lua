@@ -11,3 +11,11 @@ o.window("^[cC]ode$", { workspace = "3" })
 
 -- Workspace 4: Chromium -> AOC monitor
 o.window("^[cC]hromium.*$", { workspace = "4" })
+
+-- Omarchy Finder popup window rule
+o.window("^omarchy-finder$", {
+  float = true,
+  center = true,
+  size = { 1360, 820 },
+})
+

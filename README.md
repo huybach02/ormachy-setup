@@ -10,10 +10,13 @@ omarchy-setup/
 │   ├── bin/
 │   │   ├── omarchy-agent-usage-antigravity # Script thu thập quota/token Antigravity
 │   │   ├── omarchy-agent-usage-update      # Wrapper cập nhật usage và trích xuất email
+│   │   ├── omarchy-finder                  # Popup tìm kiếm siêu nhanh ứng dụng, file & thư mục (fzf + fd)
 │   │   ├── omarchy-sysinfo                 # Thu thập thông số CPU, RAM, Disk, GPU cho bar
 │   │   └── php-switch                      # Tiện ích chuyển đổi phiên bản PHP linh hoạt (alias: sphp)
 │   ├── blesh/
 │   │   └── init.sh        # Cấu hình autocompletion và phím Tab cho ble.sh
+│   ├── fastfetch/
+│   │   └── config.jsonc   # Cấu hình Fastfetch (logo pixel xanh dương B&T)
 │   ├── fcitx5/
 │   │   ├── config         # Phím tắt chuyển bộ gõ (Alt+Shift_L)
 │   │   └── profile        # Cấu hình bộ gõ tiếng Việt Fcitx5 Lotus
@@ -28,6 +31,9 @@ omarchy-setup/
 │   ├── omarchy/
 │   │   ├── agents/
 │   │   │   └── antigravity.json # Nhãn gói Antigravity
+│   │   ├── branding/
+│   │   │   ├── about.txt        # Logo pixel B&T cho About / Fastfetch
+│   │   │   └── screensaver.txt  # Logo pixel B&T cho Screensaver
 │   │   ├── plugins/
 │   │   │   ├── agents/          # Plugin Agents tùy biến hiển thị email tài khoản
 │   │   │   └── huybach02.tray/  # Plugin Tray tùy biến (luôn hiện đầy đủ icon, icon rõ nét)
@@ -58,12 +64,13 @@ omarchy-setup/
 ```bash
 ./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
-./setup.sh keybindings  # Cấu hình phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
+./setup.sh keybindings  # Cấu hình phím tắt (Super+Alt+Space: Tìm kiếm All-in-one, Super+Shift+S, Super+V, Alt+Shift_L)
 ./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, Sublime Text, GitHub CLI, LibreOffice) & đặt Edge/Sublime Text làm mặc định
 ./setup.sh browser      # Đặt Microsoft Edge đã cài làm trình duyệt mặc định (Omarchy, liên kết web, HTML)
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
 ./setup.sh terminal     # Cấu hình font chữ terminal (JetBrainsMono Nerd Font size 12)
+./setup.sh branding     # Cấu hình logo B&T pixel (màu xanh dương) cho Fastfetch và Screensaver
 ./setup.sh agent_quota  # Hiển thị quota thật Gemini và Claude/GPT trên widget Agents
 ./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
 ./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)

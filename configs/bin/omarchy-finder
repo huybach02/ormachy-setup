@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Omarchy Finder - Fast all-in-one search for Apps, Files, and Folders
+# ==============================================================================
+set -euo pipefail
+
+launch_ui() {
+    local tmp
+    tmp=$(mktemp /tmp/omarchy-finder.XXXXXX)
+    
+    # Run UI in foot terminal
+    foot --app-id=omarchy-finder --title="Search Apps, Files & Folders" -w 1360x820 "$0" --run-tui "$tmp" || true
+
+    # After foot closes, process the selection in the background parent
+    if [[ -s "$tmp" ]]; then
+        local key
+        local line
+        key=$(head -n 1 "$tmp")
+        line=$(sed -n '2p' "$tmp")
+
+        if [[ -z "$line" ]]; then
+            line="$key"
+            key=""
+        fi
+
+        rm -f "$tmp"
+
+        if [[ -n "$line" ]]; then
+            execute_action "$key" "$line"
+        fi
+    else
+        rm -f "$tmp"
+    fi
+}
+
+generate_index() {
+    python3 -c "
+import os, glob, sys
+
+home = os.path.expanduser('~')
+
+try:
+    # 1. Applications
+    seen_apps = set()
+    paths = glob.glob('/usr/share/applications/*.desktop') + glob.glob(os.path.join(home, '.local/share/applications/*.desktop'))
+    for p in sorted(paths):
+        base = os.path.basename(p)
+        if base in seen_apps:
+            continue
+        try:
+            with open(p, 'r', encoding='utf-8', errors='ignore') as f:
+                name, nodisplay = None, False
+                for line in f:
+                    if line.startswith('Name=') and not name:
+                        name = line[5:].strip()
+                    elif line.strip() == 'NoDisplay=true':
+                        nodisplay = True
+                if name and not nodisplay:
+                    seen_apps.add(base)
+                    print(f'󰀻  [App]  {name}\t{p}')
+        except Exception:
+            pass
+
+    # 2. Common User Folders
+    common = ['Desktop', 'Documents', 'Downloads', 'Music', 'Pictures', 'Videos', 'Work', 'omarchy-setup']
+    for c in common:
+        full = os.path.join(home, c)
+        if os.path.isdir(full):
+            print(f'  [Dir]  {c}\t{full}')
+
+    # 3. Walk Home Directory
+    skip = {'.git', 'node_modules', '.cache', '.cargo', '.rustup', '.local/share/Trash', '.var', '.mozilla', '.npm'}
+    for root, dirs, files in os.walk(home):
+        dirs[:] = [d for d in dirs if d not in skip]
+        rel_root = os.path.relpath(root, home)
+        for d in sorted(dirs):
+            rel = os.path.join(rel_root, d) if rel_root != '.' else d
+            print(f'  [Dir]  {rel}\t{os.path.join(root, d)}')
+        for file in sorted(files):
+            rel = os.path.join(rel_root, file) if rel_root != '.' else file
+            print(f'  [File] {rel}\t{os.path.join(root, file)}')
+except (BrokenPipeError, IOError):
+    pass
+"
+}
+
+preview_item() {
+    local type="${1:-}"
+    local path="${2:-}"
+
+    if [[ -z "$path" || ! -e "$path" ]]; then
+        return
+    fi
+
+    if [[ "$type" =~ "Dir" || -d "$path" ]]; then
+        if command -v eza &>/dev/null; then
+            eza --tree --level=2 --color=always --icons "$path" 2>/dev/null || ls -la "$path"
+        else
+            ls -la "$path"
+        fi
+    elif [[ "$type" =~ "App" || "$path" == *.desktop ]]; then
+        grep -E "^(Name|Comment|Exec|GenericName|Categories)=" "$path" 2>/dev/null || true
+    else
+        if command -v bat &>/dev/null; then
+            bat --style=numbers --color=always --line-range :300 "$path" 2>/dev/null || cat "$path" 2>/dev/null
+        else
+            head -n 300 "$path" 2>/dev/null
+        fi
+    fi
+}
+
+run_tui() {
+    local output_file="${1:-}"
+
+    export FZF_DEFAULT_OPTS="
+        --layout=reverse
+        --border=none
+        --margin=1,2
+        --info=inline
+        --prompt='󰍉  '
+        --pointer='▶ '
+        --marker='✓ '
+        --header='Enter: Open | Ctrl-O: Reveal | Ctrl-E: Edit | Ctrl-T: Terminal | Esc: Quit'
+        --header-first
+        --color=bg+:#283457,bg:#1a1b26,spinner:#7dcfff,hl:#bb9af7
+        --color=fg:#c0caf5,header:#7aa2f7,info:#7dcfff,pointer:#7dcfff
+        --color=marker:#9ece6a,fg+:#c0caf5,prompt:#7aa2f7,hl+:#bb9af7
+    "
+
+    local selected
+    selected=$(generate_index | fzf \
+        --delimiter=$'\t' \
+        --with-nth=1 \
+        --preview="omarchy-finder --preview {1} {2}" \
+        --preview-window=right:50%:wrap \
+        --bind="change:first+preview-top" \
+        --expect=ctrl-o,ctrl-e,ctrl-t || true)
+
+    if [[ -n "$selected" && -n "$output_file" ]]; then
+        printf "%s\n" "$selected" > "$output_file"
+    fi
+}
+
+execute_action() {
+    local key="$1"
+    local line="$2"
+
+    local item_type
+    local item_path
+    item_type=$(echo "$line" | cut -f1)
+    item_path=$(echo "$line" | cut -f2)
+
+    if [[ -z "$item_path" || ! -e "$item_path" ]]; then
+        return 0
+    fi
+
+    case "$key" in
+        ctrl-o)
+            # Reveal in Nautilus
+            if [[ -d "$item_path" ]]; then
+                nohup nautilus "$item_path" >/dev/null 2>&1 &
+            else
+                nohup nautilus --select "$item_path" >/dev/null 2>&1 &
+            fi
+            ;;
+        ctrl-e)
+            # Open in editor
+            if command -v omarchy-launch-editor &>/dev/null; then
+                nohup omarchy-launch-editor "$item_path" >/dev/null 2>&1 &
+            else
+                nohup "${VISUAL:-${EDITOR:-subl}}" "$item_path" >/dev/null 2>&1 &
+            fi
+            ;;
+        ctrl-t)
+            # Open terminal
+            local target_dir="$item_path"
+            [[ -d "$target_dir" ]] || target_dir="$(dirname "$target_dir")"
+            nohup foot -D "$target_dir" >/dev/null 2>&1 &
+            ;;
+        *)
+            # Default Enter action
+            if [[ "$item_type" =~ "App" || "$item_path" == *.desktop ]]; then
+                if grep -qE '^Terminal=true' "$item_path" 2>/dev/null; then
+                    local exec_cmd
+                    exec_cmd=$(grep -E '^Exec=' "$item_path" | head -n 1 | sed 's/^Exec=//;s/ %[a-zA-Z]//g')
+                    if command -v omarchy-launch-tui &>/dev/null; then
+                        nohup omarchy-launch-tui $exec_cmd >/dev/null 2>&1 &
+                    else
+                        nohup xdg-terminal-exec -e $exec_cmd >/dev/null 2>&1 &
+                    fi
+                else
+                    local desktop_file
+                    desktop_file="$(basename "$item_path")"
+                    if command -v gtk-launch &>/dev/null && gtk-launch "$desktop_file" >/dev/null 2>&1; then
+                        :
+                    elif command -v gio &>/dev/null; then
+                        nohup gio launch "$item_path" >/dev/null 2>&1 &
+                    fi
+                fi
+            elif [[ -d "$item_path" ]]; then
+                if command -v nautilus &>/dev/null; then
+                    nohup nautilus "$item_path" >/dev/null 2>&1 &
+                else
+                    nohup xdg-open "$item_path" >/dev/null 2>&1 &
+                fi
+            else
+                # Default file opening via xdg-open
+                nohup xdg-open "$item_path" >/dev/null 2>&1 &
+            fi
+            ;;
+    esac
+}
+
+if [[ "${1:-}" == "--run-tui" ]]; then
+    run_tui "${2:-}"
+elif [[ "${1:-}" == "--preview" ]]; then
+    preview_item "${2:-}" "${3:-}"
+else
+    launch_ui
+fi

@@ -160,6 +160,17 @@ setup_keybindings() {
     cp "$source_file" "$target_file"
     log_success "Đã cập nhật ${target_file}"
     
+    # Cài đặt tiện ích omarchy-finder
+    local source_finder="${CONFIGS_DIR}/bin/omarchy-finder"
+    local target_finder="${HOME}/.local/bin/omarchy-finder"
+    if [ -f "$source_finder" ]; then
+        mkdir -p "${HOME}/.local/bin"
+        backup_file "$target_finder"
+        cp "$source_finder" "$target_finder"
+        chmod +x "$target_finder"
+        log_success "Đã cài đặt tiện ích tìm kiếm ${target_finder}"
+    fi
+    
     # Reload Hyprland nếu đang chạy trong session Hyprland
     if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
         log_info "Đang reload cấu hình Hyprland..."
@@ -515,6 +526,40 @@ setup_terminal() {
     killall -SIGUSR1 foot 2>/dev/null || true
 
     log_success "Đã thiết lập font size ${font_size} cho terminal hoàn tất!"
+}
+
+# --- Module: Branding & Pixel Logo (B&T Logo & Fastfetch) ---
+setup_branding() {
+    log_info "Bắt đầu cấu hình branding (logo B&T pixel và Fastfetch)..."
+
+    local branding_src="${CONFIGS_DIR}/omarchy/branding"
+    local branding_target="${HOME}/.config/omarchy/branding"
+    local fastfetch_src="${CONFIGS_DIR}/fastfetch/config.jsonc"
+    local fastfetch_target="${HOME}/.config/fastfetch/config.jsonc"
+
+    # 1. Cấu hình about.txt và screensaver.txt
+    mkdir -p "$branding_target"
+    if [ -f "${branding_src}/about.txt" ]; then
+        backup_file "${branding_target}/about.txt"
+        cp "${branding_src}/about.txt" "${branding_target}/about.txt"
+        log_success "Đã đồng bộ ${branding_target}/about.txt"
+    fi
+
+    if [ -f "${branding_src}/screensaver.txt" ]; then
+        backup_file "${branding_target}/screensaver.txt"
+        cp "${branding_src}/screensaver.txt" "${branding_target}/screensaver.txt"
+        log_success "Đã đồng bộ ${branding_target}/screensaver.txt"
+    fi
+
+    # 2. Cấu hình Fastfetch
+    mkdir -p "${HOME}/.config/fastfetch"
+    if [ -f "$fastfetch_src" ]; then
+        backup_file "$fastfetch_target"
+        cp "$fastfetch_src" "$fastfetch_target"
+        log_success "Đã đồng bộ ${fastfetch_target}"
+    fi
+
+    log_success "Đã thiết lập branding logo B&T pixel (màu xanh dương) thành công!"
 }
 
 # --- Module: Agent Quota & Usage (Antigravity & Codex) ---
@@ -1132,6 +1177,9 @@ main() {
         terminal)
             setup_terminal
             ;;
+        branding|logo)
+            setup_branding
+            ;;
         agent_quota)
             setup_agent_quota
             ;;
@@ -1164,6 +1212,7 @@ main() {
             setup_file_manager
             setup_apps
             setup_looknfeel
+            setup_branding
             setup_agent_quota
             setup_sysinfo
             setup_vietnamese_input
@@ -1174,7 +1223,7 @@ main() {
             setup_autocompletion
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|terminal|agent_quota|sysinfo|vietnamese|php|node|symfony|automount|autocompletion]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|vietnamese|php|node|symfony|automount|autocompletion]"
             exit 1
             ;;
     esac

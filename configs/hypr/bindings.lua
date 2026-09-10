@@ -14,3 +14,9 @@ o.bind("SUPER + V", "Clipboard manager", "omarchy-shell shell toggle omarchy.cli
 -- Toggle Vietnamese input method (Alt + Left Shift)
 o.bind("ALT + Shift_L", "Toggle Vietnamese Input", "fcitx5-remote -t")
 
+-- Omni Finder (Search Apps, Files & Folders)
+hl.unbind("SUPER + ALT + SPACE")
+o.bind("SUPER + ALT + SPACE", "Search Apps & Files", "omarchy-finder")
+
+
+
