@@ -1322,7 +1322,13 @@ EOF
         sed -i 's/^hw.cpu.ncore = .*/hw.cpu.ncore = 4/' "$avd_config"
         sed -i 's/^hw.ramSize = .*/hw.ramSize = 3072M/' "$avd_config"
         sed -i 's/^vm.heapSize = .*/vm.heapSize = 512M/' "$avd_config"
+        sed -i 's/^hw.keyboard = no/hw.keyboard = yes/' "$avd_config"
         log_success "Đã cấu hình tối ưu máy ảo tại ${avd_config}!"
+    fi
+
+    # Tắt bàn phím ảo khi có bàn phím máy tính
+    if command -v adb &>/dev/null && adb get-state &>/dev/null; then
+        adb shell settings put secure show_ime_with_hard_keyboard 0 2>/dev/null || true
     fi
 
     # 6. Cấu hình Window Rule Hyprland để máy ảo tự động mở dạng Floating
