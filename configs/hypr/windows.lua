@@ -19,3 +19,8 @@ o.window("^omarchy-finder$", {
   size = { 1360, 820 },
 })
 
+-- Android Emulator: Float to keep phone aspect ratio and avoid empty side areas
+o.window("^([eE]mulator|qemu-system-x86_64)$", {
+  float = true,
+})
+

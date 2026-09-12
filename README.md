@@ -84,7 +84,10 @@ omarchy-setup/
 ./setup.sh symfony      # Cài đặt Symfony CLI, kích hoạt iconv & bash completion
 ./setup.sh automount    # Cấu hình tự động mount ổ đĩa dữ liệu (/dev/sda5) khi boot
 ./setup.sh autocompletion # Cài đặt và cấu hình autocompletion cho terminal (ble.sh + Tab)
+./setup.sh flutter      # Cài đặt môi trường Flutter Mobile, Android Studio, Android SDK, Emulator & VS Code
 ```
+
+> **Lưu ý:** Lệnh `flutter` không tự động chạy khi thực thi `./setup.sh` (hoặc `./setup.sh all`). Khi cần thiết lập hoặc khôi phục môi trường Flutter Mobile, bạn hãy chạy riêng lệnh `./setup.sh flutter`.
 
 Lệnh `browser` ưu tiên Edge Stable, sau đó Beta và Dev nếu có. Bước này cũng tự chạy trong `packages` và `all`, cập nhật các liên kết web/HTML bằng XDG mà vẫn giữ các ứng dụng mặc định khác. Nếu chưa cài Edge, chạy `./setup.sh packages` trước. Lệnh `automount` cấu hình phân vùng `/dev/sda5` (UUID `8E3A42193A41FEA9`) vào `/run/media/$USER/8E3A42193A41FEA9` an toàn với quyền user và hỗ trợ boot không bị treo (`nofail`).
 

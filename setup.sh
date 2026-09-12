@@ -1203,6 +1203,196 @@ setup_autocompletion() {
     log_success "Hoàn tất thiết lập autocompletion! Mở terminal mới hoặc gõ lệnh để trải nghiệm."
 }
 
+# --- Module: Flutter Mobile Development Environment ---
+setup_flutter() {
+    log_info "Bắt đầu cài đặt & cấu hình môi trường Flutter Mobile (Android SDK, Android Studio, Emulator)..."
+
+    # 1. Cài đặt và cấu hình Java 17 via mise
+    if command -v mise &>/dev/null; then
+        if ! mise ls java 2>/dev/null | grep -q "17"; then
+            log_info "Đang cài đặt OpenJDK 17 thông qua mise..."
+            mise install java@temurin-17.0.20+101
+        fi
+        mise use -g java@temurin-17.0.20+101
+        log_success "Đã cấu hình Java 17 (Temurin) qua mise thành công!"
+    else
+        log_warn "Không tìm thấy mise trên hệ thống, kiểm tra Java hiện tại..."
+        if ! command -v java &>/dev/null; then
+            log_error "Vui lòng cài đặt Java 17 (JDK) trước khi tiếp tục."
+            return 1
+        fi
+    fi
+
+    # 2. Cài đặt Flutter SDK vào ~/development/flutter
+    local flutter_dir="${HOME}/development/flutter"
+    if [ -d "${flutter_dir}/.git" ]; then
+        log_info "Flutter SDK đã tồn tại tại ${flutter_dir}."
+    else
+        log_info "Đang tải Flutter SDK (channel stable) vào ${flutter_dir}..."
+        mkdir -p "${HOME}/development"
+        git clone -b stable https://github.com/flutter/flutter.git "${flutter_dir}"
+        log_success "Đã clone Flutter SDK thành công!"
+    fi
+    export PATH="${flutter_dir}/bin:${PATH}"
+
+    # 3. Cài đặt Android Studio vào ~/.local/share/android-studio
+    local studio_dir="${HOME}/.local/share/android-studio"
+    if [ -f "${studio_dir}/bin/studio.sh" ]; then
+        log_info "Android Studio đã được cài đặt tại ${studio_dir}."
+    else
+        log_info "Đang tải và giải nén Android Studio vào ${studio_dir}..."
+        mkdir -p "${HOME}/.local/share"
+        curl -L "https://dl.google.com/dl/android/studio/ide-zips/2026.1.4.7/android-studio-quail4-linux.tar.gz" | tar -xz -C "${HOME}/.local/share/"
+        log_success "Đã cài đặt Android Studio vào ${studio_dir}!"
+    fi
+
+    # Tạo symlink android-studio vào ~/.local/bin
+    mkdir -p "${HOME}/.local/bin"
+    ln -sf "${studio_dir}/bin/studio.sh" "${HOME}/.local/bin/android-studio"
+
+    # Tạo desktop launcher cho Android Studio
+    local apps_dir="${HOME}/.local/share/applications"
+    mkdir -p "$apps_dir"
+    cat << EOF > "${apps_dir}/android-studio.desktop"
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Android Studio
+Exec=env "QT_QPA_PLATFORM=wayland;xcb" "${studio_dir}/bin/studio.sh" %f
+Icon=${studio_dir}/bin/studio.png
+Comment=The official Android IDE
+Categories=Development;IDE;
+Terminal=false
+StartupNotify=true
+StartupWMClass=jetbrains-studio
+MimeType=application/x-extension-iml;
+EOF
+    update-desktop-database "$apps_dir" 2>/dev/null || true
+    log_success "Đã tạo shortcut và lệnh android-studio."
+
+    # 4. Cài đặt Android Command-line Tools & SDK Packages
+    local android_home="${HOME}/Android/Sdk"
+    mkdir -p "$android_home"
+
+    if [ ! -f "${android_home}/cmdline-tools/latest/bin/sdkmanager" ]; then
+        log_info "Đang tải Android Command-line Tools..."
+        local tmp_zip="/tmp/cmdline-tools.zip"
+        local tmp_dir="/tmp/cmdline-tools-extract"
+        rm -rf "$tmp_zip" "$tmp_dir"
+        curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o "$tmp_zip"
+        unzip -q "$tmp_zip" -d "$tmp_dir"
+        mkdir -p "${android_home}/cmdline-tools/latest"
+        cp -r "${tmp_dir}/cmdline-tools/"* "${android_home}/cmdline-tools/latest/"
+        rm -rf "$tmp_dir" "$tmp_zip"
+        log_success "Đã cài đặt cmdline-tools vào ${android_home}/cmdline-tools/latest!"
+    fi
+
+    export ANDROID_HOME="${android_home}"
+    export PATH="${android_home}/cmdline-tools/latest/bin:${android_home}/platform-tools:${android_home}/emulator:${PATH}"
+
+    # Cấu hình Flutter trỏ tới Android SDK và Android Studio
+    flutter config --android-sdk="${android_home}" >/dev/null 2>&1 || true
+    flutter config --android-studio-dir="${studio_dir}" >/dev/null 2>&1 || true
+
+    # Cài đặt các gói SDK cần thiết
+    log_info "Kiểm tra và cài đặt các gói Android SDK (platform-tools, build-tools 36, platforms 36, emulator, system-image 34)..."
+    yes | sdkmanager --licenses >/dev/null 2>&1 || true
+    sdkmanager "platform-tools" "build-tools;36.0.0" "platforms;android-36" "emulator" "system-images;android-34;google_apis;x86_64"
+    yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
+    log_success "Đã cài đặt và chấp nhận licenses Android SDK thành công!"
+
+    # 5. Cấu hình máy ảo Pixel 7 (AVD) và tối ưu GPU
+    mkdir -p "${HOME}/.android" "${HOME}/.config/.android/avd"
+    if [ ! -e "${HOME}/.android/avd" ]; then
+        ln -sf "${HOME}/.config/.android/avd" "${HOME}/.android/avd"
+    fi
+    export ANDROID_AVD_HOME="${HOME}/.android/avd"
+
+    if ! emulator -list-avds 2>/dev/null | grep -q "^Pixel_7_API_34$"; then
+        log_info "Đang khởi tạo máy ảo Pixel_7_API_34..."
+        echo "no" | avdmanager create avd -n Pixel_7_API_34 -k "system-images;android-34;google_apis;x86_64" -d "pixel_7" --force
+    fi
+
+    # Tối ưu cấu hình phần cứng AVD (GPU Host, 4 Cores, 3GB RAM, 512MB Heap)
+    local avd_config="${HOME}/.config/.android/avd/Pixel_7_API_34.avd/config.ini"
+    if [ -f "$avd_config" ]; then
+        log_info "Tối ưu hóa phần cứng máy ảo (GPU Host, 4 nhân CPU, 3GB RAM)..."
+        sed -i 's/^hw.gpu.enabled = no/hw.gpu.enabled = yes/' "$avd_config"
+        sed -i 's/^hw.gpu.mode = .*/hw.gpu.mode = host/' "$avd_config"
+        sed -i 's/^hw.cpu.ncore = .*/hw.cpu.ncore = 4/' "$avd_config"
+        sed -i 's/^hw.ramSize = .*/hw.ramSize = 3072M/' "$avd_config"
+        sed -i 's/^vm.heapSize = .*/vm.heapSize = 512M/' "$avd_config"
+        log_success "Đã cấu hình tối ưu máy ảo tại ${avd_config}!"
+    fi
+
+    # 6. Cấu hình Window Rule Hyprland để máy ảo tự động mở dạng Floating
+    local target_windows="${HOME}/.config/hypr/windows.lua"
+    if [ -f "$target_windows" ]; then
+        if ! grep -q 'class.*Emulator' "$target_windows" && ! grep -q '\[eE\]mulator' "$target_windows"; then
+            log_info "Thêm window rule floating cho Android Emulator trong Hyprland..."
+            cat << 'EOF' >> "$target_windows"
+
+-- Android Emulator: Float to keep phone aspect ratio and avoid empty side areas
+o.window("^([eE]mulator|qemu-system-x86_64)$", {
+  float = true,
+})
+EOF
+            if [ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "" ] && command -v hyprctl &>/dev/null; then
+                hyprctl reload 2>/dev/null || true
+            fi
+            log_success "Đã cập nhật window rule cho Hyprland!"
+        fi
+    fi
+
+    # 7. Cấu hình tích hợp VS Code
+    if command -v code &>/dev/null; then
+        log_info "Cấu hình extension và đường dẫn Flutter SDK cho VS Code..."
+        code --install-extension Dart-Code.flutter >/dev/null 2>&1 || true
+
+        local vscode_settings="${HOME}/.config/Code/User/settings.json"
+        if [ -f "$vscode_settings" ]; then
+            if ! grep -q "dart.flutterSdkPath" "$vscode_settings"; then
+                python3 -c "
+path = '$vscode_settings'
+with open(path, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+idx = content.rfind('}')
+if idx != -1:
+    new_content = content[:idx].rstrip()
+    if not new_content.endswith(','):
+        new_content += ','
+    new_content += '\n  \"dart.flutterSdkPath\": \"$HOME/development/flutter\"\n}\n'
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(new_content)
+" 2>/dev/null || true
+                log_success "Đã thêm dart.flutterSdkPath vào VS Code settings.json!"
+            fi
+        fi
+    fi
+
+    # 8. Cấu hình biến môi trường vào ~/.bashrc
+    local bashrc="${HOME}/.bashrc"
+    if [ -f "$bashrc" ]; then
+        if ! grep -q "development/flutter/bin" "$bashrc"; then
+            log_info "Bổ sung biến môi trường Flutter & Android SDK vào ~/.bashrc..."
+            backup_file "$bashrc"
+            sed -i '/export BROWSER=/a \
+\
+# Flutter & Android SDK\
+export PATH="$HOME/development/flutter/bin:$PATH"\
+export ANDROID_HOME="$HOME/Android/Sdk"\
+export ANDROID_AVD_HOME="$HOME/.android/avd"\
+export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator"' "$bashrc"
+            log_success "Đã thêm biến môi trường Flutter vào ~/.bashrc!"
+        fi
+    fi
+
+    log_success "Hoàn tất cài đặt môi trường Flutter Mobile!"
+    log_info "Bạn có thể kiểm tra môi trường bằng lệnh: flutter doctor"
+    log_info "Khởi động máy ảo Android: flutter emulators --launch Pixel_7_API_34"
+}
+
 # --- Main Dispatcher ---
 main() {
     echo -e "${COLOR_INFO}==========================================${COLOR_RESET}"
@@ -1272,6 +1462,9 @@ main() {
         autocompletion|autocomplete|completion)
             setup_autocompletion
             ;;
+        flutter)
+            setup_flutter
+            ;;
         all)
             setup_monitors
             setup_workspaces
@@ -1290,9 +1483,10 @@ main() {
             setup_symfony
             setup_automount
             setup_autocompletion
+            # Lưu ý: flutter KHÔNG tự động cài đặt khi chạy all (chạy riêng: ./setup.sh flutter)
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|helium|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|media|vietnamese|php|node|symfony|automount|autocompletion]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|helium|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|media|vietnamese|php|node|symfony|automount|autocompletion|flutter]"
             exit 1
             ;;
     esac
