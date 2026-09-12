@@ -3,9 +3,8 @@
 Collect Antigravity usage and quota into one display-ready JSON record for Omarchy.
 
 Reads real per-group quota via agy --print /usage --output-format json.
-History counts are local activity, not a measurement of server quota.
+Collects token usage, prompts, and active days across Antigravity CLI and IDE.
 
-Watches ~/.gemini/antigravity-cli history, conversations, and quota status.
 Configurable via ~/.config/omarchy/agents/antigravity.json.
 Writes to ~/.local/state/omarchy/agents/usage/antigravity.json.
 """
@@ -18,17 +17,20 @@ import shutil
 import subprocess
 import math
 import fcntl
+import argparse
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HOME = Path.home()
-GEMINI_DIR = HOME / ".gemini" / "antigravity-cli"
-HISTORY_FILE = GEMINI_DIR / "history.jsonl"
-DB_FILE = GEMINI_DIR / "conversation_summaries.db"
-LOG_DIR = GEMINI_DIR / "log"
+CANDIDATE_DIRS = [
+    HOME / ".gemini" / "antigravity",
+    HOME / ".gemini" / "antigravity-cli",
+]
+
+HISTORY_FILE = HOME / ".gemini" / "antigravity-cli" / "history.jsonl"
 CANDIDATE_LOG_DIRS = [
-    GEMINI_DIR / "log",
+    HOME / ".gemini" / "antigravity-cli" / "log",
     HOME / ".gemini" / "antigravity" / "log",
 ]
 
@@ -38,7 +40,6 @@ CONFIG_FILE = CONFIG_DIR / "antigravity.json"
 USAGE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state")) / "omarchy" / "agents" / "usage"
 USAGE_FILE = USAGE_DIR / "antigravity.json"
 
-# Default quota configuration for Antigravity
 DEFAULT_CONFIG = {
     "tier_label": "DeepMind"
 }
@@ -54,7 +55,6 @@ def load_config():
         except Exception:
             pass
     else:
-        # Create default config file if it doesn't exist
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -94,15 +94,12 @@ def get_user_email(candidate_dirs=None):
         except Exception:
             continue
 
-    # Sort files prioritizing newest filename (cli-YYYYMMDD_HHMMSS.log ensures chronological order)
-    # and mtime as secondary sort
     unique_logs.sort(key=lambda p: (p.name, os.path.getmtime(p)), reverse=True)
 
     for log in unique_logs:
         try:
             with open(log, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
-            # Read in reverse (bottom-up) to find the most recent auth event
             for line in reversed(lines):
                 if "applyAuthResult:" in line and "email=" in line:
                     parts = line.split("email=")
@@ -113,7 +110,6 @@ def get_user_email(candidate_dirs=None):
         except Exception:
             continue
 
-    # Fallback to git config user.email if available
     try:
         res = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True, timeout=2)
         if res.returncode == 0 and res.stdout.strip() and "@" in res.stdout.strip():
@@ -129,7 +125,6 @@ def unknown_limits():
          "percent": -1, "resetsAt": "", "unknown": True}
         for group in ("Gemini", "Claude / GPT") for window in ("5h", "Weekly")
     ]
-
 
 def parse_quota(payload):
     """CLI reports remaining fractions; Omarchy meters report fractions used."""
@@ -173,7 +168,6 @@ def parse_quota(payload):
         raise ValueError("No valid quota buckets")
     return limits
 
-
 def fetch_quota():
     executable = shutil.which("agy")
     if not executable:
@@ -195,7 +189,6 @@ def fetch_quota():
         return limits, "Some quotas unavailable", "Some quota buckets were missing or invalid."
     return limits, "", ""
 
-
 def proto_varint(blob, offset):
     value = 0
     for shift in range(0, 70, 7):
@@ -207,7 +200,6 @@ def proto_varint(blob, offset):
         if byte < 128:
             return value, offset
     raise ValueError("Invalid varint")
-
 
 def proto_fields(blob):
     offset = 0
@@ -231,155 +223,190 @@ def proto_fields(blob):
             offset += size
         yield tag >> 3, value
 
-
 def token_stats(conversation_dir, dates, today):
-    # Field numbers verified against the descriptors embedded in agy:
-    # CortexStepGeneratorMetadata -> ChatModelMetadata -> ModelUsageStats.
-    # Read generation usage once; the same usage is also copied into steps.
+    if isinstance(conversation_dir, (str, Path)):
+        conversation_dirs = [Path(conversation_dir)]
+    else:
+        conversation_dirs = [Path(p) for p in conversation_dir]
+
     days = {day: 0 for day in dates}
     models, today_models, seen = {}, {}, set()
     skipped = 0
-    for path in sorted(conversation_dir.glob("*.db")):
-        try:
-            with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
-                timestamps = {}
-                for idx, blob in conn.execute("SELECT idx, metadata FROM steps"):
-                    try:
-                        meta = dict(proto_fields(blob or b""))
-                        stamp = dict(proto_fields(meta.get(1, b""))).get(1)
-                        if stamp:
-                            timestamps[idx] = datetime.fromtimestamp(stamp, timezone.utc).astimezone().strftime("%Y-%m-%d")
-                    except (ValueError, TypeError, OverflowError, OSError):
-                        continue
-                for idx, blob in conn.execute("SELECT idx, data FROM gen_metadata"):
-                    try:
-                        entries = list(proto_fields(blob or b""))
-                        meta = dict(entries)
-                        chat = dict(proto_fields(meta.get(1, b"")))
-                        if 4 not in chat:
+
+    for cdir in conversation_dirs:
+        if not cdir.is_dir():
+            continue
+        for path in sorted(cdir.glob("*.db")):
+            try:
+                with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
+                    timestamps = {}
+                    for idx, blob in conn.execute("SELECT idx, metadata FROM steps"):
+                        try:
+                            meta = dict(proto_fields(blob or b""))
+                            stamp = dict(proto_fields(meta.get(1, b""))).get(1)
+                            if stamp:
+                                timestamps[idx] = datetime.fromtimestamp(stamp, timezone.utc).astimezone().strftime("%Y-%m-%d")
+                        except (ValueError, TypeError, OverflowError, OSError):
                             continue
-                        usage = dict(proto_fields(chat[4]))
-                        identity = usage.get(7) or usage.get(11) or (path.name, idx)
-                        if identity in seen:
-                            continue
-                        indices = []
-                        for field, value in entries:
-                            if field == 2:
-                                if isinstance(value, int):
-                                    indices.append(value)
-                                else:
-                                    pos = 0
-                                    while pos < len(value):
-                                        step, pos = proto_varint(value, pos)
-                                        indices.append(step)
-                        day = next((timestamps[i] for i in indices if i in timestamps), None)
-                        if day is None:
+                    for idx, blob in conn.execute("SELECT idx, data FROM gen_metadata"):
+                        try:
+                            entries = list(proto_fields(blob or b""))
+                            meta = dict(entries)
+                            chat = dict(proto_fields(meta.get(1, b"")))
+                            if 4 not in chat:
+                                continue
+                            usage = dict(proto_fields(chat[4]))
+                            identity = usage.get(7) or usage.get(11) or (path.name, idx)
+                            if identity in seen:
+                                continue
+                            indices = []
+                            for field, value in entries:
+                                if field == 2:
+                                    if isinstance(value, int):
+                                        indices.append(value)
+                                    else:
+                                        pos = 0
+                                        while pos < len(value):
+                                            step, pos = proto_varint(value, pos)
+                                            indices.append(step)
+                            day = next((timestamps[i] for i in indices if i in timestamps), None)
+                            if day is None:
+                                skipped += 1
+                                continue
+                            model = (chat.get(21) or chat.get(19) or chat.get(22) or b"").decode("utf-8")
+                            if not model:
+                                model = f"Unknown model ({usage.get(1, 'unknown')})"
+                            counts = {name: usage.get(field, 0) for name, field in
+                                      (("inputTokens", 2), ("outputTokens", 3), ("cacheWriteTokens", 4), ("cacheReadTokens", 5))}
+                            if any(not isinstance(v, int) or v < 0 for v in counts.values()):
+                                raise ValueError("Invalid token count")
+                            counts["totalTokens"] = sum(counts.values())
+                            if counts["totalTokens"] == 0:
+                                continue
+                            seen.add(identity)
+                            # Match keys expected by Panel.qml and Main.qml
+                            bucket = models.setdefault(model, {
+                                "inputTokens": 0, "outputTokens": 0,
+                                "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0,
+                                "totalTokens": 0
+                            })
+                            bucket["inputTokens"] += counts["inputTokens"]
+                            bucket["outputTokens"] += counts["outputTokens"]
+                            bucket["cacheReadInputTokens"] += counts["cacheReadTokens"]
+                            bucket["cacheCreationInputTokens"] += counts["cacheWriteTokens"]
+                            bucket["totalTokens"] += counts["totalTokens"]
+                            if day in days:
+                                days[day] += counts["totalTokens"]
+                            if day == today:
+                                today_models[model] = today_models.get(model, 0) + counts["totalTokens"]
+                        except (ValueError, TypeError, AttributeError, UnicodeError):
                             skipped += 1
-                            continue
-                        model = (chat.get(21) or chat.get(19) or chat.get(22) or b"").decode("utf-8")
-                        if not model:
-                            model = f"Unknown model ({usage.get(1, 'unknown')})"
-                        counts = {name: usage.get(field, 0) for name, field in
-                                  (("inputTokens", 2), ("outputTokens", 3), ("cacheWriteTokens", 4), ("cacheReadTokens", 5))}
-                        if any(not isinstance(v, int) or v < 0 for v in counts.values()):
-                            raise ValueError("Invalid token count")
-                        # Output already includes thinking + response tokens.
-                        counts["totalTokens"] = sum(counts.values())
-                        if counts["totalTokens"] == 0:
-                            continue
-                        seen.add(identity)
-                        bucket = models.setdefault(model, {key: 0 for key in counts})
-                        for key, value in counts.items():
-                            bucket[key] += value
-                        if day in days:
-                            days[day] += counts["totalTokens"]
-                        if day == today:
-                            today_models[model] = today_models.get(model, 0) + counts["totalTokens"]
-                    except (ValueError, TypeError, AttributeError, UnicodeError):
-                        skipped += 1
-        except sqlite3.Error:
-            skipped += 1
+            except sqlite3.Error:
+                skipped += 1
+
     return days, models, today_models, skipped
 
+def count_user_prompts(conversation_dirs, today):
+    total_user_prompts = 0
+    today_user_prompts = 0
+    unique_sessions = set()
+    today_sessions = set()
+    active_dates = set()
+
+    for cdir in conversation_dirs:
+        if not cdir.is_dir():
+            continue
+        for path in sorted(cdir.glob("*.db")):
+            conv_id = path.stem
+            unique_sessions.add(conv_id)
+            try:
+                with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
+                    cols = {row[1] for row in conn.execute("PRAGMA table_info(steps)").fetchall()}
+                    if "step_type" not in cols:
+                        continue
+                    for idx, step_type, blob in conn.execute("SELECT idx, step_type, metadata FROM steps WHERE step_type = 14"):
+                        total_user_prompts += 1
+                        try:
+                            meta = dict(proto_fields(blob or b""))
+                            stamp = dict(proto_fields(meta.get(1, b""))).get(1)
+                            if stamp:
+                                d_str = datetime.fromtimestamp(stamp, timezone.utc).astimezone().strftime("%Y-%m-%d")
+                                active_dates.add(d_str)
+                                if d_str == today:
+                                    today_user_prompts += 1
+                                    today_sessions.add(conv_id)
+                        except Exception:
+                            continue
+            except sqlite3.Error:
+                continue
+
+    return {
+        "total_prompts": total_user_prompts,
+        "today_prompts": today_user_prompts,
+        "unique_sessions": unique_sessions,
+        "today_sessions": today_sessions,
+        "active_dates": active_dates,
+    }
 
 def main():
+    parser = argparse.ArgumentParser(description="Antigravity agent usage collector")
+    parser.add_argument("--force", action="store_true", help="Force rescan and refresh")
+    parser.add_argument("--limits-only", action="store_true", help="Only refresh quota limits")
+    args, _ = parser.parse_known_args()
+
     config = load_config()
     tier_label = str(config.get("tier_label", "DeepMind"))
+
+    # Fast path: limits-only can reuse existing cache
+    if args.limits_only and not args.force and USAGE_FILE.is_file():
+        try:
+            with open(USAGE_FILE, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            if isinstance(cached, dict) and cached.get("id") == "antigravity":
+                limits, quota_status, quota_help = fetch_quota()
+                cached["limits"] = limits
+                cached["usageStatusText"] = quota_status
+                cached["authHelpText"] = quota_help
+                cached["quotaSource"] = "agy-usage" if any(not entry["unknown"] for entry in limits) else "unavailable"
+                cached["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                output_json = json.dumps(cached, separators=(",", ":"))
+                tmp_file = USAGE_DIR / f".antigravity.{os.getpid()}.tmp"
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    f.write(output_json + "\n")
+                tmp_file.replace(USAGE_FILE)
+                if sys.stdout.isatty():
+                    print(json.dumps(cached, indent=2))
+                return
+        except Exception:
+            pass
 
     now_local = datetime.now()
     today_str = now_local.strftime("%Y-%m-%d")
     recent_dates = [(now_local - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
-    recent_days = {d: 0 for d in recent_dates}
-    active_dates = set()
 
-    total_prompts = 0
-    today_prompts = 0
-    unique_sessions = set()
-    today_sessions = set()
+    conv_dirs = [d / "conversations" for d in CANDIDATE_DIRS if (d / "conversations").is_dir()]
+    days, models, today_models, skipped = token_stats(conv_dirs, recent_dates, today_str)
+    prompt_info = count_user_prompts(conv_dirs, today_str)
 
-    gemini_prompts_today = 0
-    claude_prompts_today = 0
-
-
-    # Track current active model per conversation (default to gemini)
-    conv_model = {}
-
+    # Check history.jsonl for any additional CLI sessions or dates
     if HISTORY_FILE.is_file():
-        with open(HISTORY_FILE, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
                     data = json.loads(line)
-                    ts_ms = data.get("timestamp")
                     conv_id = data.get("conversationId", "")
-                    entry_type = data.get("type", "")
-                    display_text = str(data.get("display", ""))
-
-                    # Detect /model changes
-                    if entry_type == "slash_command" and "/model" in display_text:
-                        if "claude" in display_text.lower():
-                            conv_model[conv_id] = "claude"
-                        elif "gemini" in display_text.lower():
-                            conv_model[conv_id] = "gemini"
-
-                    if ts_ms:
-                        dt_utc = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
-                        dt_local = dt_utc.astimezone()
-                        d_str = dt_local.strftime("%Y-%m-%d")
-                        active_dates.add(d_str)
-
-                        if d_str in recent_days:
-                            recent_days[d_str] += 1
-                        
-                        is_today = (d_str == today_str)
-                        if is_today:
-                            today_prompts += 1
-                            if conv_id:
-                                today_sessions.add(conv_id)
-
-                        model_type = conv_model.get(conv_id, "gemini")
-                        if "claude" in display_text.lower() and ("claude" in model_type or entry_type != "slash_command" and "claude-sonnet" in display_text):
-                            model_type = "claude"
-
-                        if is_today:
-                            if model_type == "claude":
-                                claude_prompts_today += 1
-                            else:
-                                gemini_prompts_today += 1
-
                     if conv_id:
-                        unique_sessions.add(conv_id)
-                    total_prompts += 1
-                except Exception:
-                    continue
-
-    token_days, model_usage, today_by_model, skipped = token_stats(
-        GEMINI_DIR / "conversations", recent_dates, today_str
-    )
+                        prompt_info["unique_sessions"].add(conv_id)
+                    ts_ms = data.get("timestamp")
+                    if ts_ms:
+                        dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).astimezone()
+                        prompt_info["active_dates"].add(dt.strftime("%Y-%m-%d"))
+        except Exception:
+            pass
 
     user_email = get_user_email()
-
     limits, quota_status, quota_help = fetch_quota()
 
     record = {
@@ -389,16 +416,16 @@ def main():
         "updatedAt": datetime.now(timezone.utc).isoformat(),
         "ready": True,
         "hasLocalStats": True,
-        "todayPrompts": today_prompts,
-        "todaySessions": max(1, len(today_sessions)),
-        "todayTotalTokens": sum(today_by_model.values()),
-        "todayTokensByModel": today_by_model,
-        "recentDays": [{"date": d, "messageCount": token_days[d]} for d in recent_dates],
-        "totalPrompts": total_prompts,
-        "totalSessions": max(1, len(unique_sessions)),
-        "activeDays": len(active_dates),
-        "activeDates": sorted(list(active_dates)),
-        "modelUsage": model_usage,
+        "todayPrompts": prompt_info["today_prompts"],
+        "todaySessions": max(1, len(prompt_info["today_sessions"])),
+        "todayTotalTokens": sum(today_models.values()),
+        "todayTokensByModel": today_models,
+        "recentDays": [{"date": d, "messageCount": days[d]} for d in recent_dates],
+        "totalPrompts": prompt_info["total_prompts"],
+        "totalSessions": max(1, len(prompt_info["unique_sessions"])),
+        "activeDays": len(prompt_info["active_dates"]),
+        "activeDates": sorted(list(prompt_info["active_dates"])),
+        "modelUsage": models,
         "tokenStatsSource": "conversation-db",
         "tokenStatsSkipped": skipped,
         "limits": limits,
@@ -422,7 +449,6 @@ def main():
 
 if __name__ == "__main__":
     USAGE_DIR.mkdir(parents=True, exist_ok=True)
-    # Timer and popup refresh may run concurrently; allow only one CLI fetch.
     with (USAGE_DIR / ".antigravity.lock").open("w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -7,15 +7,60 @@
 # 3. Injects user email into all agent usage JSON records
 # ==============================================================================
 
-# Run upstream update script
-if [ -x /usr/share/omarchy/bin/omarchy-agent-usage-update ]; then
-    /usr/share/omarchy/bin/omarchy-agent-usage-update "$@"
+run_antigravity=1
+only_agents=()
+skip_next=0
+for arg in "$@"; do
+    if (( skip_next )); then
+        skip_next=0
+        continue
+    fi
+    if [[ "$arg" == "--except" ]]; then
+        skip_next=1
+        continue
+    fi
+    if [[ "$arg" =~ ^-- ]]; then
+        continue
+    fi
+    only_agents+=("$arg")
+done
+
+for (( i=1; i<=$#; i++ )); do
+    arg="${!i}"
+    if [[ "$arg" == "--except" ]]; then
+        next_i=$((i+1))
+        if [[ "${!next_i}" == "antigravity" ]]; then
+            run_antigravity=0
+            break
+        fi
+    fi
+done
+
+if (( ${#only_agents[@]} > 0 )); then
+    run_antigravity=0
+    for a in "${only_agents[@]}"; do
+        if [[ "$a" == "antigravity" ]]; then
+            run_antigravity=1
+            break
+        fi
+    done
 fi
 
-# Run Antigravity collector if installed
-if [ -x "$HOME/.local/bin/omarchy-agent-usage-antigravity" ]; then
-    "$HOME/.local/bin/omarchy-agent-usage-antigravity" &>/dev/null || true
+pids=()
+if [ -x /usr/share/omarchy/bin/omarchy-agent-usage-update ]; then
+    /usr/share/omarchy/bin/omarchy-agent-usage-update "$@" &
+    pids+=($!)
 fi
+
+if [ $run_antigravity -eq 1 ] && [ -x "$HOME/.local/bin/omarchy-agent-usage-antigravity" ]; then
+    "$HOME/.local/bin/omarchy-agent-usage-antigravity" "$@" &
+    pids+=($!)
+fi
+
+for pid in "${pids[@]}"; do
+    wait "$pid" 2>/dev/null || true
+done
+
 
 # Post-process all agent JSON files to ensure user emails are present
 python3 - << 'PYEOF'
