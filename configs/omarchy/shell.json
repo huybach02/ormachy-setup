@@ -97,7 +97,7 @@
           "id": "omarchy.audio"
         },
         {
-          "id": "omarchy.monitor"
+          "id": "io.github.fluffet.display"
         },
         {
           "id": "omarchy.power"
@@ -105,11 +105,30 @@
       ]
     }
   },
-  "plugins": [],
+  "plugins": [
+    {
+      "id": "rocha.pasteimage"
+    },
+    {
+      "id": "ewweberlin.quickswitch"
+    },
+    {
+      "id": "io.github.fluffet.display"
+    },
+    {
+      "id": "huybach02.clipboard"
+    },
+    {
+      "id": "io.github.woogy7.workspaces"
+    }
+  ],
   "disabledPlugins": [
-    "omarchy.media"
+    "omarchy.media",
+    "omarchy.monitor",
+    "omarchy.clipboard"
   ],
   "cloneSourceRestores": [
-    "huybach02.media"
+    "huybach02.media",
+    "huybach02.clipboard"
   ]
 }

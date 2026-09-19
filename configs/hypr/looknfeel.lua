@@ -6,4 +6,8 @@ hl.config({
     gaps_in = 0,
     gaps_out = 0,
   },
+  cursor = {
+    no_warps = true,
+    warp_on_change_workspace = 0,
+  },
 })

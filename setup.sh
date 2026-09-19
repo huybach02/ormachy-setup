@@ -77,7 +77,7 @@ init_sudo() {
 
 # --- Module: Monitor & Workspace Monitor Rules ---
 setup_monitors() {
-    log_info "Bắt đầu cấu hình màn hình và gán workspace (Philip: Trái/Primary, AOC: Phải/Secondary)..."
+    log_info "Bắt đầu cấu hình màn hình và gán workspace (Philip: Trái/Primary, AOC: Phải/Secondary @ 75Hz)..."
     
     local target_dir="${HOME}/.config/hypr"
     local target_file="${target_dir}/monitors.lua"
@@ -253,6 +253,15 @@ setup_browser() {
         else
             sed -i '1i export BROWSER="microsoft-edge"' "${HOME}/.bashrc"
         fi
+    fi
+
+    # Cấu hình cờ Hardware Video Acceleration cho Microsoft Edge
+    local source_flags="${CONFIGS_DIR}/edge/microsoft-edge-stable-flags.conf"
+    local target_flags="${config_dir}/microsoft-edge-stable-flags.conf"
+    if [ -f "$source_flags" ]; then
+        backup_file "$target_flags"
+        cp "$source_flags" "$target_flags"
+        log_success "Đã cấu hình Hardware Video Acceleration (VA-API / NVIDIA) cho Microsoft Edge!"
     fi
 
     log_success "Đã đặt Microsoft Edge (${desktop_id}) làm trình duyệt mặc định cho Omarchy, liên kết web và HTML!"
@@ -461,7 +470,7 @@ setup_apps() {
 
 # --- Module: Look and Feel (Gaps, Borders, etc.) ---
 setup_looknfeel() {
-    log_info "Bắt đầu cấu hình giao diện & khoảng cách cửa sổ (Gaps = 0)..."
+    log_info "Bắt đầu cấu hình giao diện, khoảng cách cửa sổ (Gaps = 0) và giữ nguyên vị trí chuột khi chuyển workspace/màn hình..."
     
     local hypr_dir="${HOME}/.config/hypr"
     local target_looknfeel="${hypr_dir}/looknfeel.lua"
@@ -516,10 +525,29 @@ setup_terminal() {
         log_success "Đã cập nhật font size ${font_size} trong ${target_foot}"
     fi
 
-    # 2. Cập nhật các terminal khác nếu có (Alacritty, Kitty, Ghostty)
+    # 2. Cấu hình Ghostty terminal
+    local ghostty_dir="${HOME}/.config/ghostty"
+    local target_ghostty="${ghostty_dir}/config"
+    local source_ghostty="${CONFIGS_DIR}/ghostty/config"
+    mkdir -p "$ghostty_dir"
+    if [ -f "$source_ghostty" ]; then
+        backup_file "$target_ghostty"
+        cp "$source_ghostty" "$target_ghostty"
+        log_success "Đã đồng bộ ${target_ghostty} (font size ${font_size}, shell-integration = none)!"
+    elif [ -f "$target_ghostty" ]; then
+        backup_file "$target_ghostty"
+        sed -i -E "s/^(font-size = )[0-9]+/\\1${font_size}/" "$target_ghostty"
+        if ! grep -q "^shell-integration" "$target_ghostty"; then
+            echo "shell-integration = none" >> "$target_ghostty"
+        else
+            sed -i -E "s/^shell-integration = .*/shell-integration = none/" "$target_ghostty"
+        fi
+        log_success "Đã cập nhật font size ${font_size} và tắt shell-integration trong ${target_ghostty}"
+    fi
+
+    # 3. Cập nhật các terminal khác nếu có (Alacritty, Kitty)
     local alacritty_cfg="${HOME}/.config/alacritty/alacritty.toml"
     local kitty_cfg="${HOME}/.config/kitty/kitty.conf"
-    local ghostty_cfg="${HOME}/.config/ghostty/config"
 
     if [ -f "$alacritty_cfg" ]; then
         backup_file "$alacritty_cfg"
@@ -531,18 +559,27 @@ setup_terminal() {
         sed -i -E "s/^(font_size[[:space:]]+)[0-9]+(\.[0-9]+)?/\\1${font_size}.0/" "$kitty_cfg"
     fi
 
-    if [ -f "$ghostty_cfg" ]; then
-        backup_file "$ghostty_cfg"
-        sed -i -E "s/^(font-size = )[0-9]+/\\1${font_size}/" "$ghostty_cfg"
+    # 4. Đặt Ghostty làm terminal mặc định nếu đã cài đặt
+    if command -v ghostty &>/dev/null; then
+        if command -v omarchy &>/dev/null; then
+            omarchy default terminal ghostty &>/dev/null || true
+        else
+            cat > "${HOME}/.config/xdg-terminals.list" <<EOF
+# Terminal emulator preference order for xdg-terminal-exec
+# The first found and valid terminal will be used
+com.mitchellh.ghostty.desktop
+EOF
+        fi
+        log_success "Đã đặt Ghostty làm terminal mặc định!"
     fi
 
-    # 3. Reload terminal nếu đang chạy
+    # 5. Reload terminal nếu đang chạy
     if command -v omarchy &>/dev/null; then
         omarchy restart terminal &>/dev/null || true
     fi
     killall -SIGUSR1 foot 2>/dev/null || true
 
-    log_success "Đã thiết lập font size ${font_size} cho terminal hoàn tất!"
+    log_success "Đã thiết lập terminal hoàn tất (Ghostty font size ${font_size})!"
 }
 
 # --- Module: Branding & Pixel Logo (B&T Logo & Fastfetch) ---
@@ -667,6 +704,149 @@ setup_agent_quota() {
     fi
 }
 
+# --- Module: PasteImage Plugin (AI Terminal Screenshot Paste) ---
+setup_pasteimage() {
+    log_info "Bắt đầu cấu hình plugin PasteImage (rocha.pasteimage)..."
+    
+    if ! command -v omarchy &>/dev/null; then
+        log_warn "Không tìm thấy lệnh omarchy, bỏ qua cấu hình plugin PasteImage."
+        return 0
+    fi
+
+    local plugin_dir="${HOME}/.config/omarchy/plugins/rocha.pasteimage"
+    local repo_url="https://github.com/matheusrrocha/omarchy-pasteimage.git"
+
+    # 1. Cài đặt plugin từ Git nếu chưa có
+    if [ ! -d "$plugin_dir" ]; then
+        log_info "Đang tải plugin rocha.pasteimage từ ${repo_url}..."
+        git clone "$repo_url" "$plugin_dir"
+        log_success "Đã tải plugin rocha.pasteimage thành công!"
+    else
+        log_info "Plugin rocha.pasteimage đã tồn tại."
+    fi
+
+    # Đồng bộ shell.json để đảm bảo rocha.pasteimage được nạp mà không làm mất bố cục bar
+    local source_shell="${CONFIGS_DIR}/omarchy/shell.json"
+    local target_shell="${HOME}/.config/omarchy/shell.json"
+    if [ -f "$source_shell" ]; then
+        if ! grep -q "rocha.pasteimage" "$target_shell" 2>/dev/null; then
+            backup_file "$target_shell"
+            cp "$source_shell" "$target_shell"
+            log_success "Đã cập nhật rocha.pasteimage vào cấu hình thanh bar!"
+        fi
+    fi
+
+    # 2. Tạo symlink omarchy-pasteimage vào ~/.local/bin
+    if [ -x "${plugin_dir}/install" ]; then
+        "${plugin_dir}/install"
+    fi
+
+    # 3. Áp dụng patch cho Clipboard Overlay (chọn ảnh trong Super+V rồi Enter sẽ dán vào AI terminal)
+    local patch_script="${plugin_dir}/extras/patch-clipboard-overlay"
+    if [ -x "$patch_script" ]; then
+        log_info "Đang áp dụng patch clipboard overlay cho PasteImage..."
+        "$patch_script" &>/dev/null || true
+        log_success "Đã áp dụng patch clipboard overlay!"
+    fi
+
+    # Đảm bảo PasteImage không chiếm quyền phím Super+V (để Super+V mở lịch sử Clipboard)
+    local paste_bin="${HOME}/.local/bin/omarchy-pasteimage"
+    if [ ! -x "$paste_bin" ] && [ -x "${plugin_dir}/bin/omarchy-pasteimage" ]; then
+        paste_bin="${plugin_dir}/bin/omarchy-pasteimage"
+    fi
+    if [ -x "$paste_bin" ]; then
+        "$paste_bin" disable &>/dev/null || true
+        log_success "Đã giữ phím Super+V mở lịch sử Clipboard và hỗ trợ dán ảnh vào AI terminal qua overlay!"
+    fi
+
+    # 4. Khởi động lại omarchy shell nếu đang chạy để nạp service
+    if pgrep quickshell &>/dev/null && command -v omarchy &>/dev/null; then
+        log_info "Đang khởi động lại omarchy shell..."
+        omarchy restart shell &>/dev/null || true
+    fi
+}
+
+# --- Module: Advanced Displays Plugin (Fluffet/omarchy-advanced-displays) ---
+setup_advanced_displays() {
+    log_info "Bắt đầu cấu hình plugin Advanced Displays (io.github.fluffet.display)..."
+    
+    if ! command -v omarchy &>/dev/null; then
+        log_warn "Không tìm thấy lệnh omarchy, bỏ qua cấu hình plugin Advanced Displays."
+        return 0
+    fi
+
+    local plugin_dir="${HOME}/.config/omarchy/plugins/io.github.fluffet.display"
+    local repo_url="https://github.com/Fluffet/omarchy-advanced-displays.git"
+
+    # 1. Cài đặt plugin từ Git nếu chưa có
+    if [ ! -d "$plugin_dir" ]; then
+        log_info "Đang tải plugin io.github.fluffet.display từ ${repo_url}..."
+        git clone "$repo_url" "$plugin_dir"
+        log_success "Đã tải plugin io.github.fluffet.display thành công!"
+    else
+        log_info "Plugin io.github.fluffet.display đã tồn tại."
+    fi
+
+    # 2. Đồng bộ shell.json để thay thế omarchy.monitor bằng io.github.fluffet.display
+    local source_shell="${CONFIGS_DIR}/omarchy/shell.json"
+    local target_shell="${HOME}/.config/omarchy/shell.json"
+    if [ -f "$source_shell" ]; then
+        if ! grep -q "io.github.fluffet.display" "$target_shell" 2>/dev/null || grep -q "omarchy.monitor" "$target_shell" 2>/dev/null; then
+            backup_file "$target_shell"
+            cp "$source_shell" "$target_shell"
+            log_success "Đã cập nhật cấu hình thanh bar: thay thế Display mặc định bằng Advanced Displays!"
+        fi
+    fi
+
+    # 3. Khởi động lại omarchy shell nếu đang chạy để nạp widget
+    if pgrep quickshell &>/dev/null && command -v omarchy &>/dev/null; then
+        log_info "Đang khởi động lại omarchy shell..."
+        omarchy restart shell &>/dev/null || true
+    fi
+}
+
+# --- Module: Workspace Switcher Plugin (Woogy7/omarchy-workspace-switcher) ---
+setup_workspace_switcher() {
+    log_info "Bắt đầu cấu hình plugin Workspace Switcher (io.github.woogy7.workspaces)..."
+    
+    if ! command -v omarchy &>/dev/null; then
+        log_warn "Không tìm thấy lệnh omarchy, bỏ qua cấu hình plugin Workspace Switcher."
+        return 0
+    fi
+
+    local plugin_dir="${HOME}/.config/omarchy/plugins/io.github.woogy7.workspaces"
+    local repo_url="https://github.com/Woogy7/omarchy-workspace-switcher.git"
+
+    # 1. Cài đặt plugin từ Git nếu chưa có
+    if [ ! -d "$plugin_dir" ]; then
+        log_info "Đang tải plugin io.github.woogy7.workspaces từ ${repo_url}..."
+        git clone "$repo_url" "$plugin_dir"
+        log_success "Đã tải plugin io.github.woogy7.workspaces thành công!"
+    else
+        log_info "Plugin io.github.woogy7.workspaces đã tồn tại."
+    fi
+
+    # 2. Đồng bộ shell.json để kích hoạt plugin trong shell
+    local source_shell="${CONFIGS_DIR}/omarchy/shell.json"
+    local target_shell="${HOME}/.config/omarchy/shell.json"
+    if [ -f "$source_shell" ]; then
+        if ! grep -q "io.github.woogy7.workspaces" "$target_shell" 2>/dev/null; then
+            backup_file "$target_shell"
+            cp "$source_shell" "$target_shell"
+            log_success "Đã cập nhật cấu hình shell: kích hoạt io.github.woogy7.workspaces!"
+        fi
+    fi
+
+    # 3. Đồng bộ phím tắt Alt+Tab và Super+Tab
+    setup_keybindings
+
+    # 4. Khởi động lại omarchy shell nếu đang chạy để nạp plugin
+    if pgrep quickshell &>/dev/null && command -v omarchy &>/dev/null; then
+        log_info "Đang khởi động lại omarchy shell..."
+        omarchy restart shell &>/dev/null || true
+    fi
+}
+
 # --- Module: System Stats Bar Widgets (CPU, RAM, Disk, GPU) ---
 setup_sysinfo() {
     log_info "Bắt đầu cấu hình widget hiển thị thông số hệ thống (CPU, RAM, Disk, GPU) trên thanh bar..."
@@ -745,6 +925,42 @@ setup_media() {
         omarchy restart shell &>/dev/null || true
         log_success "Omarchy shell đã khởi động lại thành công!"
     fi
+}
+
+# --- Module: Audio Stability (PipeWire & WirePlumber) ---
+setup_audio() {
+    log_info "Bắt đầu cấu hình ổn định âm thanh (PipeWire buffer & WirePlumber idle suspend)..."
+
+    # 1. Cấu hình PipeWire (khóa buffer tối thiểu min-quantum = 1024 để tránh rè/khựng/xrun)
+    local pw_dir="${HOME}/.config/pipewire/pipewire.conf.d"
+    local target_pw="${pw_dir}/10-sound-stability.conf"
+    local source_pw="${CONFIGS_DIR}/pipewire/pipewire.conf.d/10-sound-stability.conf"
+    mkdir -p "$pw_dir"
+    if [ -f "$source_pw" ]; then
+        backup_file "$target_pw"
+        cp "$source_pw" "$target_pw"
+        log_success "Đã đồng bộ ${target_pw}"
+    fi
+
+    # 2. Cấu hình WirePlumber (tắt tự động sleep thiết bị âm thanh sau 5s không dùng)
+    local wp_dir="${HOME}/.config/wireplumber/wireplumber.conf.d"
+    local target_wp="${wp_dir}/50-disable-suspend.conf"
+    local source_wp="${CONFIGS_DIR}/wireplumber/wireplumber.conf.d/50-disable-suspend.conf"
+    mkdir -p "$wp_dir"
+    if [ -f "$source_wp" ]; then
+        backup_file "$target_wp"
+        cp "$source_wp" "$target_wp"
+        log_success "Đã đồng bộ ${target_wp}"
+    fi
+
+    # 3. Khởi động lại dịch vụ âm thanh nếu đang chạy
+    if systemctl --user is-active --quiet pipewire 2>/dev/null; then
+        log_info "Đang khởi động lại dịch vụ pipewire, pipewire-pulse và wireplumber..."
+        systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
+        log_success "Đã khởi động lại dịch vụ âm thanh thành công!"
+    fi
+
+    log_success "Hoàn tất cấu hình ổn định âm thanh!"
 }
 
 # --- Module: Vietnamese Input Method (Fcitx5 + Lotus) ---
@@ -1318,13 +1534,13 @@ EOF
         echo "no" | avdmanager create avd -n Pixel_7_API_34 -k "system-images;android-34;google_apis;x86_64" -d "pixel_7" --force
     fi
 
-    # Tối ưu cấu hình phần cứng AVD (GPU Host, 4 Cores, 3GB RAM, 512MB Heap)
+    # Tối ưu cấu hình phần cứng AVD (GPU Host, 2 Cores, 3GB RAM, 512MB Heap)
     local avd_config="${HOME}/.config/.android/avd/Pixel_7_API_34.avd/config.ini"
     if [ -f "$avd_config" ]; then
-        log_info "Tối ưu hóa phần cứng máy ảo (GPU Host, 4 nhân CPU, 3GB RAM)..."
+        log_info "Tối ưu hóa phần cứng máy ảo (GPU Host, 2 nhân CPU, 3GB RAM)..."
         sed -i 's/^hw.gpu.enabled = no/hw.gpu.enabled = yes/' "$avd_config"
         sed -i 's/^hw.gpu.mode = .*/hw.gpu.mode = host/' "$avd_config"
-        sed -i 's/^hw.cpu.ncore = .*/hw.cpu.ncore = 4/' "$avd_config"
+        sed -i 's/^hw.cpu.ncore = .*/hw.cpu.ncore = 2/' "$avd_config"
         sed -i 's/^hw.ramSize = .*/hw.ramSize = 3072M/' "$avd_config"
         sed -i 's/^vm.heapSize = .*/vm.heapSize = 512M/' "$avd_config"
         sed -i 's/^hw.keyboard = no/hw.keyboard = yes/' "$avd_config"
@@ -1505,11 +1721,23 @@ main() {
         agent_quota)
             setup_agent_quota
             ;;
+        pasteimage|paste_image|paste-image)
+            setup_pasteimage
+            ;;
+        advanced_displays|displays|display)
+            setup_advanced_displays
+            ;;
+        switcher|workspace_switcher|workspace-switcher)
+            setup_workspace_switcher
+            ;;
         sysinfo)
             setup_sysinfo
             ;;
         media|visualizer|soundwave)
             setup_media
+            ;;
+        audio|sound|pipewire)
+            setup_audio
             ;;
         vietnamese|input)
             setup_vietnamese_input
@@ -1542,8 +1770,12 @@ main() {
             setup_looknfeel
             setup_branding
             setup_agent_quota
+            setup_pasteimage
+            setup_advanced_displays
+            setup_workspace_switcher
             setup_sysinfo
             setup_media
+            setup_audio
             setup_vietnamese_input
             setup_php
             setup_nodejs
@@ -1553,7 +1785,7 @@ main() {
             # Lưu ý: flutter KHÔNG tự động cài đặt khi chạy all (chạy riêng: ./setup.sh flutter)
             ;;
         *)
-            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|helium|file_manager|apps|looknfeel|terminal|branding|agent_quota|sysinfo|media|vietnamese|php|node|symfony|automount|autocompletion|flutter]"
+            echo "Cách sử dụng: $0 [all|monitors|workspaces|keybindings|packages|browser|helium|file_manager|apps|looknfeel|terminal|branding|agent_quota|pasteimage|displays|switcher|sysinfo|media|audio|vietnamese|php|node|symfony|automount|autocompletion|flutter]"
             exit 1
             ;;
     esac

@@ -7,10 +7,10 @@ local omarchy_monitor_scale = "auto"
 hl.env("GDK_SCALE", tostring(omarchy_gdk_scale))
 
 -- Philip (Primary - Left)
-hl.monitor({ output = "HDMI-A-2", mode = "preferred", position = "0x0", scale = 1 })
+hl.monitor({ output = "HDMI-A-2", mode = "1920x1080@74.97", position = "0x0", scale = 1 })
 
 -- AOC (Secondary - Right)
-hl.monitor({ output = "DP-2", mode = "preferred", position = "1920x0", scale = 1 })
+hl.monitor({ output = "DP-2", mode = "1920x1080@74.97", position = "1920x0", scale = 1 })
 
 -- Fallback for any additional display
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = omarchy_monitor_scale })

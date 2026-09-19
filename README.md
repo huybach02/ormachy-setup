@@ -20,15 +20,17 @@ omarchy-setup/
 │   ├── fcitx5/
 │   │   ├── config         # Phím tắt chuyển bộ gõ (Alt+Shift_L)
 │   │   └── profile        # Cấu hình bộ gõ tiếng Việt Fcitx5 Lotus
+│   ├── edge/
+│   │   └── microsoft-edge-stable-flags.conf # Cờ tăng tốc phần cứng GPU (VA-API NVIDIA / Wayland)
 │   ├── foot/
 │   │   └── foot.ini       # Cấu hình terminal Foot (font size 12, padding)
 │   ├── helium/
 │   │   └── helium-browser-flags.conf # Cờ tăng tốc phần cứng GPU (VA-API NVIDIA / Wayland)
 │   ├── hypr/
 │   │   ├── autostart.lua  # Tự động mở các ứng dụng khi đăng nhập
-│   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V, Alt+Shift_L)
-│   │   ├── looknfeel.lua  # Cấu hình giao diện, không viền trống (gaps = 0)
-│   │   ├── monitors.lua   # 2 màn hình (Philip Trái/Primary, AOC Phải/Secondary)
+│   │   ├── bindings.lua   # Phím tắt (Super+Shift+S, Super+V, Alt+Shift_L, Alt+Tab switcher)
+│   │   ├── looknfeel.lua  # Cấu hình giao diện, không viền trống (gaps = 0), giữ vị trí chuột
+│   │   ├── monitors.lua   # 2 màn hình (Philip Trái/Primary, AOC Phải/Secondary @ 75Hz)
 │   │   └── windows.lua    # Window rules gán cửa sổ ứng dụng vào workspace
 │   ├── omarchy/
 │   │   ├── agents/
@@ -43,14 +45,20 @@ omarchy-setup/
 │   │   ├── mimeapps.list        # Mẫu ứng dụng mặc định (Edge cho web, Sublime Text cho văn bản)
 │   │   ├── shell.json           # Cấu hình thanh bar, layout widget và idle
 │   │   └── Workspaces.qml       # Tên hiển thị các workspace trên thanh bar
-│   └── systemd/
-│       ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
-│       ├── omarchy-agent-antigravity.timer   # Timer chạy mỗi 30 giây
-│       ├── tmpfiles.d/
-│       │   └── omarchy-media.conf            # Đảm bảo /run/media tồn tại khi boot
-│       └── user/
-│           └── omarchy-fcitx5.service.d/
-│               └── override.conf             # Kích hoạt StatusNotifierItem cho fcitx5
+│   ├── pipewire/
+│   │   └── pipewire.conf.d/
+│   │       └── 10-sound-stability.conf # Khóa buffer tối thiểu min-quantum = 1024 chống rè/khựng/xrun
+│   ├── systemd/
+│   │   ├── omarchy-agent-antigravity.service # Service chạy collector định kỳ
+│   │   ├── omarchy-agent-antigravity.timer   # Timer chạy mỗi 30 giây
+│   │   ├── tmpfiles.d/
+│   │   │   └── omarchy-media.conf            # Đảm bảo /run/media tồn tại khi boot
+│   │   └── user/
+│   │       └── omarchy-fcitx5.service.d/
+│   │           └── override.conf             # Kích hoạt StatusNotifierItem cho fcitx5
+│   └── wireplumber/
+│       └── wireplumber.conf.d/
+│           └── 50-disable-suspend.conf # Tắt tự động ngắt thiết bị âm thanh khi idle (chống nổ bụp/khựng)
 ├── setup.sh               # Script chính để chạy cài đặt / áp dụng cấu hình
 └── README.md
 ```
@@ -65,19 +73,23 @@ omarchy-setup/
 
 ### 2. Áp dụng riêng từng phần
 ```bash
-./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải) & gán workspace
+./setup.sh monitors     # Cấu hình 2 màn hình (Philip Trái, AOC Phải @ 75Hz) & gán workspace
 ./setup.sh workspaces   # Cấu hình tên và vị trí các workspace trên bar
 ./setup.sh keybindings  # Cấu hình phím tắt (Super+Alt+Space: Tìm kiếm All-in-one, Super+Shift+S, Super+V, Alt+Shift_L)
 ./setup.sh packages     # Cài đặt ứng dụng (VSCode, Edge, Helium, AppImageLauncher, Sublime Text, GitHub CLI, LibreOffice) & đặt Edge/Sublime Text làm mặc định
 ./setup.sh browser      # Đặt Microsoft Edge đã cài làm trình duyệt mặc định (Omarchy, liên kết web, HTML)
 ./setup.sh helium       # Cấu hình cờ tăng tốc phần cứng giải mã video (VA-API / NVIDIA) cho Helium Browser
 ./setup.sh apps         # Cấu hình workspace gán cho app và autostart
-./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0)
+./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0) và giữ nguyên vị trí chuột khi chuyển workspace
 ./setup.sh terminal     # Cấu hình font chữ terminal (JetBrainsMono Nerd Font size 12)
 ./setup.sh branding     # Cấu hình logo B&T pixel (màu xanh dương) cho Fastfetch và Screensaver
 ./setup.sh agent_quota  # Hiển thị quota thật Gemini và Claude/GPT trên widget Agents
+./setup.sh pasteimage   # Cài đặt plugin PasteImage hỗ trợ dán ảnh màn hình vào terminal AI (Claude Code, v.v.)
+./setup.sh displays     # Cài đặt plugin Advanced Displays thay thế widget Display mặc định trên bar
+./setup.sh switcher     # Cài đặt plugin Workspace Switcher (Woogy7) và cấu hình phím tắt Alt+Tab / Super+Tab
 ./setup.sh sysinfo      # Cấu hình widget thông số máy tính (CPU, RAM, Disk, GPU) trên bar
 ./setup.sh media        # Cấu hình widget sóng nhạc động (Sound Wave Visualizer) trên bar
+./setup.sh audio        # Cấu hình ổn định âm thanh (PipeWire min-quantum = 1024, WirePlumber chống idle suspend)
 ./setup.sh vietnamese   # Cài đặt và cấu hình bộ gõ Fcitx5 Lotus (chuyển đổi Alt + Shift Trái)
 ./setup.sh php          # Cài đặt môi trường PHP (8.5 & 8.3), Composer, extensions & php-switch
 ./setup.sh node         # Cài đặt Node.js, trình quản lý fnm, Corepack (pnpm & yarn)

@@ -47,36 +47,37 @@ local function sync_emulator_windows()
     end
   end
 
-  if phone and phone.at and phone.size then
-    if phone.at.x ~= last_phone_x or phone.at.y ~= last_phone_y then
-      last_phone_x = phone.at.x
-      last_phone_y = phone.at.y
-
-      -- Dock toolbar to right edge of phone, vertically centered
-      if toolbar and toolbar.at and toolbar.size then
-        local target_tb_x = phone.at.x + phone.size.x + 4
-        local target_tb_y = math.floor(phone.at.y + (phone.size.y - toolbar.size.y) / 2)
-        if toolbar.at.x ~= target_tb_x or toolbar.at.y ~= target_tb_y then
-          hl.dispatch(hl.dsp.window.move({ window = toolbar, x = target_tb_x, y = target_tb_y }))
-        end
-      end
-
-      -- Keep loading state centered directly over the phone screen
-      if loading and loading.at and loading.size then
-        local target_ld_x = math.floor(phone.at.x + (phone.size.x - loading.size.x) / 2)
-        local target_ld_y = math.floor(phone.at.y + (phone.size.y - loading.size.y) / 2)
-        if loading.at.x ~= target_ld_x or loading.at.y ~= target_ld_y then
-          hl.dispatch(hl.dsp.window.move({ window = loading, x = target_ld_x, y = target_ld_y }))
-        end
-      end
-    end
-  else
+  if not phone or not phone.at or not phone.size then
     last_phone_x = nil
     last_phone_y = nil
+    return
+  end
+
+  if phone.at.x ~= last_phone_x or phone.at.y ~= last_phone_y then
+    last_phone_x = phone.at.x
+    last_phone_y = phone.at.y
+
+    -- Dock toolbar to right edge of phone, vertically centered
+    if toolbar and toolbar.at and toolbar.size then
+      local target_tb_x = phone.at.x + phone.size.x + 4
+      local target_tb_y = math.floor(phone.at.y + (phone.size.y - toolbar.size.y) / 2)
+      if toolbar.at.x ~= target_tb_x or toolbar.at.y ~= target_tb_y then
+        hl.dispatch(hl.dsp.window.move({ window = toolbar, x = target_tb_x, y = target_tb_y }))
+      end
+    end
+
+    -- Keep loading state centered directly over the phone screen
+    if loading and loading.at and loading.size then
+      local target_ld_x = math.floor(phone.at.x + (phone.size.x - loading.size.x) / 2)
+      local target_ld_y = math.floor(phone.at.y + (phone.size.y - loading.size.y) / 2)
+      if loading.at.x ~= target_ld_x or loading.at.y ~= target_ld_y then
+        hl.dispatch(hl.dsp.window.move({ window = loading, x = target_ld_x, y = target_ld_y }))
+      end
+    end
   end
 end
 
 hl.on("window.open", sync_emulator_windows)
 hl.on("window.title", sync_emulator_windows)
-hl.timer(sync_emulator_windows, { timeout = 50, type = "repeat" })
+hl.timer(sync_emulator_windows, { timeout = 200, type = "repeat" })
 
