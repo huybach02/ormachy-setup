@@ -8,6 +8,7 @@ Script tự động hóa cấu hình và khôi phục môi trường cá nhân t
 omarchy-setup/
 ├── configs/               # Lưu trữ các file cấu hình mẫu
 │   ├── bin/
+│   │   ├── agy-statusline                  # Script status line responsive cho Antigravity CLI (Context, 5h, Weekly)
 │   │   ├── omarchy-agent-usage-antigravity # Script thu thập quota/token Antigravity
 │   │   ├── omarchy-agent-usage-update      # Wrapper cập nhật usage và trích xuất email
 │   │   ├── omarchy-finder                  # Popup tìm kiếm siêu nhanh ứng dụng, file & thư mục (fzf + fd)
@@ -83,7 +84,7 @@ omarchy-setup/
 ./setup.sh looknfeel    # Cấu hình khoảng cách cửa sổ (gaps = 0) và giữ nguyên vị trí chuột khi chuyển workspace
 ./setup.sh terminal     # Cấu hình font chữ terminal (JetBrainsMono Nerd Font size 12)
 ./setup.sh branding     # Cấu hình logo B&T pixel (màu xanh dương) cho Fastfetch và Screensaver
-./setup.sh agent_quota  # Hiển thị quota thật Gemini và Claude/GPT trên widget Agents
+./setup.sh agent_quota  # Hiển thị quota thật trên widget Agents & cấu hình status line responsive cho Antigravity CLI
 ./setup.sh pasteimage   # Cài đặt plugin PasteImage hỗ trợ dán ảnh màn hình vào terminal AI (Claude Code, v.v.)
 ./setup.sh displays     # Cài đặt plugin Advanced Displays thay thế widget Display mặc định trên bar
 ./setup.sh switcher     # Cài đặt plugin Workspace Switcher (Woogy7) và cấu hình phím tắt Alt+Tab / Super+Tab
@@ -199,10 +200,16 @@ Timer cập nhật mỗi 30 giây. Cần cài CLI `agy` và đăng nhập trư�
 
 Nút **Refresh** trong popup cập nhật ngay dữ liệu các agent; nút hiện **Refreshing…** trong khi đang chạy. Phím **R** vẫn dùng được.
 
+### Status Line Antigravity CLI (`agy-statusline`)
+Tích hợp trực tiếp vào thanh status line của Antigravity CLI (`agy`) thông qua cấu hình `"statusLine"` trong `~/.gemini/antigravity-cli/settings.json`:
+- **Context session**: Đọc chính xác lượng token đang dùng từ session hiện tại (input + cache read tokens) trên tổng context window (1M).
+- **Quota 5h & Weekly**: Hiển thị song song cả 2 hạn mức **Gemini** và **Claude / GPT** với thanh tiến trình trực quan đổi màu theo mức dùng (<70% xanh, 70-90% vàng, >90% đỏ) và thời gian reset (`Resets in 2h30m`, `Resets in 3d18h`).
+- **Responsive tự động chống tràn**: Tự động điều chỉnh độ dài thanh progress bar, nhãn model và chuỗi thời gian dựa theo `terminal_width` của cửa sổ terminal, luôn đảm bảo không bị line wrap làm lệch giao diện TUI.
+
 ### Áp dụng các cập nhật trình duyệt và widget Agents
 ```bash
 ./setup.sh browser      # Microsoft Edge mặc định
-./setup.sh agent_quota  # Quota thật, token từ database, timer 30s, nút Refresh, popup không cuộn
+./setup.sh agent_quota  # Quota thật, token từ database, timer 30s, status line agy, nút Refresh, popup không cuộn
 ```
 `agent_quota` sao lưu các file sẽ cập nhật, khởi động lại timer để áp dụng chu kỳ mới và khởi động lại Omarchy shell để nạp giao diện mới. `./setup.sh all` cũng bao gồm hai phần này. Không cần chép cấu hình thủ công.
 

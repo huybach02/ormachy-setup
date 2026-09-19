@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""
+Custom status line script for Antigravity CLI (agy).
+Displays:
+1. Current session context window usage (with token counts and progress bar)
+2. 5h Quota (Gemini & Claude/GPT with progress bars and reset countdowns)
+3. Weekly Quota (Gemini & Claude/GPT with progress bars and reset countdowns)
+
+Responsive layout: automatically adjusts progress bar lengths and labels
+based on terminal width to prevent line wrapping or overflow.
+"""
+
+import sys
+import os
+import re
+import json
+import sqlite3
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+
+def strip_ansi(s: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", s)
+
+def truncate_ansi(s: str, max_len: int) -> str:
+    if len(strip_ansi(s)) <= max_len:
+        return s
+    res = []
+    curr_len = 0
+    in_escape = False
+    escape_seq = []
+    for ch in s:
+        if ch == "\x1b":
+            in_escape = True
+            escape_seq = [ch]
+        elif in_escape:
+            escape_seq.append(ch)
+            if ch == "m":
+                in_escape = False
+                res.append("".join(escape_seq))
+        else:
+            if curr_len < max_len - 1:
+                res.append(ch)
+                curr_len += 1
+            elif curr_len == max_len - 1:
+                res.append("…")
+                curr_len += 1
+                break
+    res.append("\x1b[0m")
+    return "".join(res)
+
+def color_for_pct(pct: float) -> str:
+    if pct < 70:
+        return "\x1b[32m"  # Green
+    elif pct < 90:
+        return "\x1b[33m"  # Yellow
+    else:
+        return "\x1b[31m"  # Red
+
+def render_bar(pct: float, length: int = 10) -> str:
+    if length <= 0:
+        return ""
+    pct = max(0.0, min(100.0, float(pct)))
+    filled = round((pct / 100.0) * length)
+    empty = length - filled
+    col = color_for_pct(pct)
+    return f"{col}{'█' * filled}\x1b[90m{'░' * empty}\x1b[0m"
+
+def format_tokens(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    elif n >= 1_000:
+        return f"{n / 1_000:.1f}k"
+    return str(n)
+
+def format_reset_time(seconds) -> str:
+    if seconds is None:
+        return "--"
+    if seconds <= 0:
+        return "now"
+    seconds = int(seconds)
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    minutes = (seconds % 3600) // 60
+
+    if days > 0:
+        if hours > 0:
+            return f"{days}d{hours}h"
+        return f"{days}d"
+    elif hours > 0:
+        if minutes > 0:
+            return f"{hours}h{minutes}m"
+        return f"{hours}h"
+    elif minutes > 0:
+        return f"{minutes}m"
+    else:
+        return f"{seconds}s"
+
+def proto_varint(blob: bytes, offset: int):
+    value = 0
+    for shift in range(0, 70, 7):
+        if offset >= len(blob):
+            raise ValueError("Truncated varint")
+        byte = blob[offset]
+        offset += 1
+        value |= (byte & 127) << shift
+        if byte < 128:
+            return value, offset
+    raise ValueError("Invalid varint")
+
+def proto_fields(blob: bytes):
+    offset = 0
+    while offset < len(blob):
+        tag, offset = proto_varint(blob, offset)
+        wire = tag & 7
+        if wire == 0:
+            value, offset = proto_varint(blob, offset)
+        elif wire == 2:
+            size, offset = proto_varint(blob, offset)
+            if offset + size > len(blob):
+                break
+            value = blob[offset:offset + size]
+            offset += size
+        elif wire in (1, 5):
+            size = 8 if wire == 1 else 4
+            if offset + size > len(blob):
+                break
+            value = blob[offset:offset + size]
+            offset += size
+        else:
+            break
+        yield tag >> 3, value
+
+def get_session_context(payload: dict):
+    cw = payload.get("context_window") or {}
+    in_tok = cw.get("total_input_tokens") or 0
+    out_tok = cw.get("total_output_tokens") or 0
+    size = cw.get("context_window_size") or 1048576
+
+    if in_tok > 0 or out_tok > 0:
+        return in_tok + out_tok, size
+
+    conv_id = payload.get("conversation_id")
+    conv_dirs = [
+        Path.home() / ".gemini" / "antigravity-cli" / "conversations",
+        Path.home() / ".gemini" / "antigravity" / "conversations",
+    ]
+
+    candidate_db = None
+    if conv_id:
+        for cdir in conv_dirs:
+            p = cdir / f"{conv_id}.db"
+            if p.is_file():
+                candidate_db = p
+                break
+
+    if not candidate_db:
+        all_dbs = []
+        for cdir in conv_dirs:
+            if cdir.is_dir():
+                all_dbs.extend(cdir.glob("*.db"))
+        if all_dbs:
+            candidate_db = max(all_dbs, key=os.path.getmtime)
+
+    if candidate_db and candidate_db.is_file():
+        try:
+            with sqlite3.connect(f"file:{candidate_db}?mode=ro", uri=True) as conn:
+                row = conn.execute("SELECT idx, data FROM gen_metadata ORDER BY idx DESC LIMIT 1").fetchone()
+                if row:
+                    entries = dict(proto_fields(row[1]))
+                    chat = dict(proto_fields(entries.get(1, b"")))
+                    usage = dict(proto_fields(chat.get(4, b"")))
+                    in_tokens = usage.get(2, 0) or 0
+                    cache_tokens = usage.get(5, 0) or 0
+                    total = in_tokens + cache_tokens
+                    if total > 0:
+                        return total, size
+        except Exception:
+            pass
+
+    return 0, size
+
+def get_quotas(payload: dict):
+    q = payload.get("quota") or {}
+
+    res = {
+        "5h": {"gemini": (0, "--"), "claude": (0, "--")},
+        "weekly": {"gemini": (0, "--"), "claude": (0, "--")}
+    }
+
+    mapping = {
+        "gemini-5h": ("5h", "gemini"),
+        "3p-5h": ("5h", "claude"),
+        "gemini-weekly": ("weekly", "gemini"),
+        "3p-weekly": ("weekly", "claude"),
+    }
+
+    now = datetime.now(timezone.utc)
+    found_any = False
+
+    for k, (win, mod) in mapping.items():
+        if k in q and isinstance(q[k], dict):
+            found_any = True
+            b = q[k]
+            rem = b.get("remaining_fraction")
+            pct = round((1.0 - rem) * 100) if rem is not None else 0
+
+            rst_sec = b.get("reset_in_seconds")
+            if rst_sec is None and b.get("reset_time"):
+                try:
+                    dt = datetime.fromisoformat(b["reset_time"].replace("Z", "+00:00"))
+                    rst_sec = (dt - now).total_seconds()
+                except Exception:
+                    pass
+            rst_str = format_reset_time(rst_sec)
+            res[win][mod] = (pct, rst_str)
+
+    if not found_any:
+        cache_file = Path.home() / ".local/state/omarchy/agents/usage/antigravity.json"
+        if cache_file.is_file():
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cdata = json.load(f)
+                for lim in cdata.get("limits", []):
+                    title = lim.get("title", "")
+                    pct = round((lim.get("percent", 0.0) or 0.0) * 100)
+                    rst_str = "--"
+                    if lim.get("resetsAt"):
+                        try:
+                            dt = datetime.fromisoformat(lim["resetsAt"].replace("Z", "+00:00"))
+                            rst_str = format_reset_time((dt - now).total_seconds())
+                        except Exception:
+                            pass
+                    if "Gemini" in title and "5h" in title:
+                        res["5h"]["gemini"] = (pct, rst_str)
+                    elif "Claude" in title and "5h" in title:
+                        res["5h"]["claude"] = (pct, rst_str)
+                    elif "Gemini" in title and "Weekly" in title:
+                        res["weekly"]["gemini"] = (pct, rst_str)
+                    elif "Claude" in title and "Weekly" in title:
+                        res["weekly"]["claude"] = (pct, rst_str)
+            except Exception:
+                pass
+
+    return res
+
+def format_quota_line(label: str, gem_pct: int, gem_rst: str, cld_pct: int, cld_rst: str, width: int) -> str:
+    # Tier 1: Exact format requested by user:
+    # 5h: Gemini [progress] 20% - Resets in 2h30m | Claude/GPT [progress] 30% - Resets in 1h20m
+    for bar_len in range(10, 1, -1):
+        line = (
+            f"\x1b[1;37m{label}:\x1b[0m "
+            f"\x1b[1;36mGemini\x1b[0m [{render_bar(gem_pct, bar_len)}] {gem_pct}% - Resets in {gem_rst} \x1b[90m|\x1b[0m "
+            f"\x1b[1;35mClaude/GPT\x1b[0m [{render_bar(cld_pct, bar_len)}] {cld_pct}% - Resets in {cld_rst}"
+        )
+        if len(strip_ansi(line)) <= width:
+            return line
+
+    # Tier 2: Shorten "Resets in" to "in"
+    for bar_len in range(8, 0, -1):
+        line = (
+            f"\x1b[1;37m{label}:\x1b[0m "
+            f"\x1b[1;36mGemini\x1b[0m [{render_bar(gem_pct, bar_len)}] {gem_pct}% in {gem_rst} \x1b[90m|\x1b[0m "
+            f"\x1b[1;35mClaude/GPT\x1b[0m [{render_bar(cld_pct, bar_len)}] {cld_pct}% in {cld_rst}"
+        )
+        if len(strip_ansi(line)) <= width:
+            return line
+
+    # Tier 3: Compact model names & time in parens
+    lbl_short = "Wk" if label.lower().startswith("w") else label
+    for bar_len in range(6, 0, -1):
+        line = (
+            f"\x1b[1;37m{lbl_short}:\x1b[0m "
+            f"\x1b[1;36mGemini\x1b[0m [{render_bar(gem_pct, bar_len)}] {gem_pct}% ({gem_rst}) \x1b[90m|\x1b[0m "
+            f"\x1b[1;35mClaude\x1b[0m [{render_bar(cld_pct, bar_len)}] {cld_pct}% ({cld_rst})"
+        )
+        if len(strip_ansi(line)) <= width:
+            return line
+
+    # Tier 4: No bar, compact
+    line = (
+        f"\x1b[1;37m{lbl_short}:\x1b[0m "
+        f"\x1b[1;36mGem\x1b[0m {gem_pct}% ({gem_rst}) \x1b[90m|\x1b[0m "
+        f"\x1b[1;35mCld\x1b[0m {cld_pct}% ({cld_rst})"
+    )
+    if len(strip_ansi(line)) <= width:
+        return line
+
+    # Tier 5: Minimal
+    line = (
+        f"\x1b[1;37m{lbl_short}:\x1b[0m "
+        f"\x1b[1;36mG\x1b[0m {gem_pct}% \x1b[90m|\x1b[0m \x1b[1;35mC\x1b[0m {cld_pct}%"
+    )
+    return truncate_ansi(line, width)
+
+def format_context_line(used: int, total: int, width: int) -> str:
+    pct = round((used / total) * 100, 1) if total > 0 else 0.0
+    u_str = format_tokens(used)
+    t_str = format_tokens(total)
+
+    # Tier 1: Full context with bar
+    for bar_len in range(10, 2, -1):
+        line = f"\x1b[1;37mContext:\x1b[0m [{render_bar(pct, bar_len)}] {pct}% ({u_str} / {t_str})"
+        if len(strip_ansi(line)) <= width:
+            return line
+
+    # Tier 2: Without bar
+    line = f"\x1b[1;37mContext:\x1b[0m {pct}% ({u_str} / {t_str})"
+    if len(strip_ansi(line)) <= width:
+        return line
+
+    # Tier 3: Compact label
+    line = f"\x1b[1;37mCtx:\x1b[0m {pct}% ({u_str}/{t_str})"
+    if len(strip_ansi(line)) <= width:
+        return line
+
+    # Tier 4: Minimal
+    line = f"\x1b[1;37mCtx:\x1b[0m {pct}%"
+    return truncate_ansi(line, width)
+
+def main():
+    payload = {}
+    try:
+        raw = sys.stdin.read()
+        if raw.strip():
+            payload = json.loads(raw)
+    except Exception:
+        pass
+
+    width = payload.get("terminal_width")
+    if not width or not isinstance(width, int) or width <= 0:
+        try:
+            width = shutil.get_terminal_size((80, 24)).columns
+        except Exception:
+            width = int(os.environ.get("COLUMNS", 80))
+
+    # 1. Context info
+    used_ctx, total_ctx = get_session_context(payload)
+    ctx_line = format_context_line(used_ctx, total_ctx, width)
+
+    # 2. Quotas
+    quotas = get_quotas(payload)
+    gem_5h_pct, gem_5h_rst = quotas["5h"]["gemini"]
+    cld_5h_pct, cld_5h_rst = quotas["5h"]["claude"]
+    gem_wk_pct, gem_wk_rst = quotas["weekly"]["gemini"]
+    cld_wk_pct, cld_wk_rst = quotas["weekly"]["claude"]
+
+    line_5h = format_quota_line("5h", gem_5h_pct, gem_5h_rst, cld_5h_pct, cld_5h_rst, width)
+    line_wk = format_quota_line("Weekly", gem_wk_pct, gem_wk_rst, cld_wk_pct, cld_wk_rst, width)
+
+    print(ctx_line)
+    print(line_5h)
+    print(line_wk)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        sys.exit(0)

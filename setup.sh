@@ -643,8 +643,44 @@ setup_agent_quota() {
         chmod +x "$target_updater"
         log_success "Đã cập nhật ${target_updater}"
     fi
+
+    # 2. Cài đặt script status line cho Antigravity CLI (agy)
+    local source_statusline="${CONFIGS_DIR}/bin/agy-statusline"
+    local target_statusline="${bin_dir}/agy-statusline"
+    if [ -f "$source_statusline" ]; then
+        backup_file "$target_statusline"
+        cp "$source_statusline" "$target_statusline"
+        chmod +x "$target_statusline"
+        log_success "Đã cập nhật ${target_statusline}"
+    fi
+
+    # Cấu hình statusLine trong ~/.gemini/antigravity-cli/settings.json
+    local agy_config_dir="${HOME}/.gemini/antigravity-cli"
+    local agy_settings="${agy_config_dir}/settings.json"
+    if [ -d "${HOME}/.gemini" ] || [ -d "$agy_config_dir" ]; then
+        mkdir -p "$agy_config_dir"
+        [ -f "$agy_settings" ] && backup_file "$agy_settings"
+        python3 -c "
+import json, os
+path = '$agy_settings'
+data = {}
+if os.path.isfile(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+data['statusLine'] = {
+    'type': 'command',
+    'command': '${target_statusline}',
+    'enabled': True
+}
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=2)
+" 2>/dev/null && log_success "Đã cấu hình statusLine cho Antigravity CLI (${agy_settings})" || log_warn "Không thể cấu hình statusLine trong ${agy_settings}"
+    fi
     
-    # 2. Cài đặt nhãn gói (quota thật được đọc qua agy /usage)
+    # 3. Cài đặt nhãn gói (quota thật được đọc qua agy /usage)
     local config_dir="${HOME}/.config/omarchy/agents"
     local target_conf="${config_dir}/antigravity.json"
     local source_conf="${CONFIGS_DIR}/omarchy/agents/antigravity.json"
